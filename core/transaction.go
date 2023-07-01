@@ -1,18 +1,39 @@
 package core
 
-import "io"
+import (
+	"fmt"
+	"github.com/evgeniy-dammer/blockchain/crypto"
+)
 
 // Transaction
 type Transaction struct {
-	Data []byte
+	Data      []byte
+	PublicKey crypto.PublicKey
+	Signature *crypto.Signature
 }
 
-// EncodeBinary
-func (t *Transaction) EncodeBinary(w io.Writer) error {
+// Sign signs a Transaction data
+func (t *Transaction) Sign(privateKey crypto.PrivateKey) error {
+	signature, err := privateKey.Sign(t.Data)
+	if err != nil {
+		return err
+	}
+
+	t.PublicKey = privateKey.PublicKey()
+	t.Signature = signature
+
 	return nil
 }
 
-// DecodeBinary
-func (t *Transaction) DecodeBinary(r io.Reader) error {
+// Verify verifies a Transaction signature
+func (t *Transaction) Verify() error {
+	if t.Signature == nil {
+		return fmt.Errorf("transaction has no signature")
+	}
+
+	if !t.Signature.Verify(t.PublicKey, t.Data) {
+		return fmt.Errorf("invalid transaction signature")
+	}
+
 	return nil
 }

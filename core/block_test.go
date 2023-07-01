@@ -1,64 +1,50 @@
 package core
 
 import (
-	"bytes"
+	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 )
 
-func TestHeader_Encode_Decode(t *testing.T) {
-	hEncode := &Header{
-		Version:       1,
-		PreviousBlock: types.RandomHash(),
-		Timestamp:     time.Now().UnixNano(),
-		Height:        10,
-		Nonce:         989394,
+// randomBlock returns a random Block
+func randomBlock(height uint32) *Block {
+	header := &Header{
+		Version:           1,
+		PreviousBlockHash: types.RandomHash(),
+		Timestamp:         time.Now().UnixNano(),
+		Height:            height,
 	}
 
-	buf := &bytes.Buffer{}
-	assert.Nil(t, hEncode.EncodeBinary(buf))
+	transaction := Transaction{
+		Data: []byte("foo"),
+	}
 
-	hDecode := &Header{}
-	assert.Nil(t, hDecode.DecodeBinary(buf))
-
-	assert.Equal(t, hEncode, hDecode)
+	return NewBlock(header, []Transaction{transaction})
 }
 
-func TestBlock_Encode_Decode(t *testing.T) {
-	bEncode := &Block{
-		Header: Header{
-			Version:       1,
-			PreviousBlock: types.RandomHash(),
-			Timestamp:     time.Now().UnixNano(),
-			Height:        10,
-			Nonce:         989394,
-		},
-		Transactions: nil,
-	}
+func TestBlock_Sign(t *testing.T) {
+	privateKey := crypto.GeneratePrivateKey()
+	block := randomBlock(0)
 
-	buf := &bytes.Buffer{}
-	assert.Nil(t, bEncode.EncodeBinary(buf))
-
-	bDecode := &Block{}
-	assert.Nil(t, bDecode.DecodeBinary(buf))
-
-	assert.Equal(t, bEncode, bDecode)
+	assert.Nil(t, block.Sign(privateKey))
+	assert.NotNil(t, block.Signature)
 }
 
-func TestBlock_Hash(t *testing.T) {
-	b := &Block{
-		Header: Header{
-			Version:       1,
-			PreviousBlock: types.RandomHash(),
-			Timestamp:     time.Now().UnixNano(),
-			Height:        10,
-			Nonce:         989394,
-		},
-		Transactions: nil,
-	}
+func TestBlock_Verify(t *testing.T) {
+	privateKey := crypto.GeneratePrivateKey()
+	block := randomBlock(0)
 
-	h := b.Hash()
-	assert.False(t, h.IsZero())
+	assert.Nil(t, block.Sign(privateKey))
+	assert.Nil(t, block.Verify())
+
+	otherPrivateKey := crypto.GeneratePrivateKey()
+	block.Validator = otherPrivateKey.PublicKey()
+
+	assert.NotNil(t, block.Verify())
+
+	block.Header.Height = 100
+
+	assert.NotNil(t, block.Verify())
 }
