@@ -15,8 +15,8 @@ type BlockHasher struct {
 }
 
 // Hash a block's Header
-func (BlockHasher) Hash(b *Block) types.Hash {
-	h := sha256.Sum256(b.HeaderData())
+func (BlockHasher) Hash(header *Header) types.Hash {
+	hash := sha256.Sum256(header.Bytes())
 
-	return types.Hash(h)
+	return types.Hash(hash)
 }

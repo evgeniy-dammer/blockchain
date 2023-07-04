@@ -18,6 +18,17 @@ type Header struct {
 	Height            uint32
 }
 
+// Bytes returns a block's Header as a slice of bytes
+func (h *Header) Bytes() []byte {
+	buf := &bytes.Buffer{}
+	enc := gob.NewEncoder(buf)
+	if err := enc.Encode(h); err != nil {
+		return nil
+	}
+
+	return buf.Bytes()
+}
+
 // Block is a block of transactions
 type Block struct {
 	Header       *Header
@@ -35,9 +46,14 @@ func NewBlock(header *Header, transactions []Transaction) *Block {
 	}
 }
 
+// AddTransaction adds Transaction to Blockchain
+func (b *Block) AddTransaction(tx *Transaction) {
+	b.Transactions = append(b.Transactions, *tx)
+}
+
 // Sign signs a Block data
 func (b *Block) Sign(privateKey crypto.PrivateKey) error {
-	signature, err := privateKey.Sign(b.HeaderData())
+	signature, err := privateKey.Sign(b.Header.Bytes())
 	if err != nil {
 		return err
 	}
@@ -48,14 +64,21 @@ func (b *Block) Sign(privateKey crypto.PrivateKey) error {
 	return nil
 }
 
-// Verify verifies a Block signature
+// Verify verifies a Block signature and transactions
 func (b *Block) Verify() error {
 	if b.Signature == nil {
 		return fmt.Errorf("block has no signature")
 	}
 
-	if !b.Signature.Verify(b.Validator, b.HeaderData()) {
+	if !b.Signature.Verify(b.Validator, b.Header.Bytes()) {
 		return fmt.Errorf("invalid block signature")
+	}
+
+	// verify all transactions in block
+	for _, tx := range b.Transactions {
+		if err := tx.Verify(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -72,21 +95,10 @@ func (b *Block) Encode(w io.Writer, encoder Encoder[*Block]) error {
 }
 
 // Hash hashes the Block
-func (b *Block) Hash(hasher Hasher[*Block]) types.Hash {
+func (b *Block) Hash(hasher Hasher[*Header]) types.Hash {
 	if b.hash.IsZero() {
-		b.hash = hasher.Hash(b)
+		b.hash = hasher.Hash(b.Header)
 	}
 
 	return b.hash
-}
-
-// HeaderData returns a block's Header as a slice of bytes
-func (b *Block) HeaderData() []byte {
-	buf := &bytes.Buffer{}
-	enc := gob.NewEncoder(buf)
-	if err := enc.Encode(b.Header); err != nil {
-		return nil
-	}
-
-	return buf.Bytes()
 }

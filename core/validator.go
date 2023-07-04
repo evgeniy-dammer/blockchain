@@ -23,6 +23,21 @@ func (bv *BlockValidator) ValidateBlock(block *Block) error {
 		return fmt.Errorf("chain already contains block %d with hash %s", block.Header.Height, block.Hash(BlockHasher{}))
 	}
 
+	if block.Header.Height != bv.blockchain.Height()+1 {
+		return fmt.Errorf("block %s too high", block.Hash(BlockHasher{}))
+	}
+
+	prevHeader, err := bv.blockchain.GetHeader(block.Header.Height - 1)
+	if err != nil {
+		return err
+	}
+
+	hash := BlockHasher{}.Hash(prevHeader)
+	
+	if hash != block.Header.PreviousBlockHash {
+		return fmt.Errorf("the hash of the previous block %s is invalid", block.Header.PreviousBlockHash)
+	}
+
 	if err := block.Verify(); err != nil {
 		return err
 	}
