@@ -2,34 +2,45 @@ package network
 
 import (
 	"fmt"
+	"github.com/evgeniy-dammer/blockchain/core"
+	"github.com/evgeniy-dammer/blockchain/crypto"
+	"log"
 	"time"
 )
 
 // ServerOptions
 type ServerOptions struct {
 	Transports []Transport
+	BlockTime  time.Duration
+	PrivateKey *crypto.PrivateKey
 }
 
 // Server
 type Server struct {
-	options ServerOptions
-	rpcCh   chan RPC
-	quitCh  chan struct{}
+	options     ServerOptions
+	blockTime   time.Duration
+	memoryPool  *TransactionPool
+	isValidator bool
+	rpcCh       chan RPC
+	quitCh      chan struct{}
 }
 
 // NewServer is a constructor for the Server
 func NewServer(options ServerOptions) *Server {
 	return &Server{
-		options: options,
-		rpcCh:   make(chan RPC),
-		quitCh:  make(chan struct{}, 1),
+		options:     options,
+		blockTime:   options.BlockTime,
+		memoryPool:  NewTransactionPool(),
+		isValidator: options.PrivateKey != nil,
+		rpcCh:       make(chan RPC),
+		quitCh:      make(chan struct{}, 1),
 	}
 }
 
 // Start starts the Server
 func (s *Server) Start() {
 	s.initTransports()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(s.blockTime)
 
 LOOP:
 	for {
@@ -39,11 +50,39 @@ LOOP:
 		case <-s.quitCh:
 			break LOOP
 		case <-ticker.C:
-			fmt.Println("do stuff every X second")
+			if s.isValidator {
+				s.createNewBlock()
+			}
 		}
 	}
 
 	fmt.Println("Server shutdown...")
+}
+
+// handleTransaction handles new transaction from network and adds it into memory pool
+func (s *Server) handleTransaction(transaction *core.Transaction) error {
+	if err := transaction.Verify(); err != nil {
+		return err
+	}
+
+	hash := transaction.Hash(core.TransactionHasher{})
+
+	if s.memoryPool.Has(hash) {
+		log.Printf("transaction with hash %s is already in mempool", hash)
+
+		return nil
+	}
+
+	log.Printf("adding new transaction with hash %s into mempool", hash)
+
+	return s.memoryPool.Add(transaction)
+}
+
+// createNewBlock creates a new block
+func (s *Server) createNewBlock() error {
+	fmt.Println("creating a new block...")
+
+	return nil
 }
 
 // initTransports initializes Transports

@@ -3,11 +3,13 @@ package core
 import (
 	"fmt"
 	"log"
+	"sync"
 )
 
 // Blockchain
 type Blockchain struct {
 	store     Storage
+	lock      sync.RWMutex
 	headers   []*Header
 	validator Validator
 }
@@ -46,6 +48,9 @@ func (bc *Blockchain) GetHeader(height uint32) (*Header, error) {
 		return nil, fmt.Errorf("given height %d is too high", height)
 	}
 
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
 	return bc.headers[height], nil
 }
 
@@ -56,12 +61,19 @@ func (bc *Blockchain) HasBlock(height uint32) bool {
 
 // Height returns a blockchain's height
 func (bc *Blockchain) Height() uint32 {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+
 	return uint32(len(bc.headers) - 1)
 }
 
 // addBlockWithoutValidation adds a block into blockchain without validation
 func (bc *Blockchain) addBlockWithoutValidation(block *Block) error {
+	bc.lock.RLock()
+
 	bc.headers = append(bc.headers, block.Header)
+
+	bc.lock.RUnlock()
 
 	log.Printf("adding new block: height - %d, hash - %s", block.Header, block.Hash(BlockHasher{}))
 
