@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
-	"io"
 )
 
 // Header is a header of the Block
@@ -85,13 +84,13 @@ func (b *Block) Verify() error {
 }
 
 // Decode decodes a Block
-func (b *Block) Decode(r io.Reader, decoder Decoder[*Block]) error {
-	return decoder.Decode(r, b)
+func (b *Block) Decode(decoder Decoder[*Block]) error {
+	return decoder.Decode(b)
 }
 
 // Encode encodes a Block
-func (b *Block) Encode(w io.Writer, encoder Encoder[*Block]) error {
-	return encoder.Encode(w, b)
+func (b *Block) Encode(encoder Encoder[*Block]) error {
+	return encoder.Encode(b)
 }
 
 // Hash hashes the Block

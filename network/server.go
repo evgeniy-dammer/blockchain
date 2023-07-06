@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var defaultBlockTime = time.Second * 5
+
 // ServerOptions
 type ServerOptions struct {
 	Transports []Transport
@@ -27,6 +29,10 @@ type Server struct {
 
 // NewServer is a constructor for the Server
 func NewServer(options ServerOptions) *Server {
+	if options.BlockTime == time.Duration(0) {
+		options.BlockTime = defaultBlockTime
+	}
+
 	return &Server{
 		options:     options,
 		blockTime:   options.BlockTime,

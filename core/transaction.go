@@ -12,6 +12,7 @@ type Transaction struct {
 	From      crypto.PublicKey
 	Signature *crypto.Signature
 	hash      types.Hash // cached version of transaction data hash
+	firstSeen int64      //timestamp of when the transaction seen locally
 }
 
 // NewTransaction is a constructor for a Transaction
@@ -54,4 +55,24 @@ func (t *Transaction) Verify() error {
 	}
 
 	return nil
+}
+
+// Encode encodes the transaction
+func (t *Transaction) Encode(encoder Encoder[*Transaction]) error {
+	return encoder.Encode(t)
+}
+
+// Decode decodes the transaction
+func (t *Transaction) Decode(decoder Decoder[*Transaction]) error {
+	return decoder.Decode(t)
+}
+
+// SetFirstSeen is setter for a transaction's firstSeen
+func (t *Transaction) SetFirstSeen(time int64) {
+	t.firstSeen = time
+}
+
+// FirstSeen returns a transaction's firstSeen
+func (t *Transaction) FirstSeen() int64 {
+	return t.firstSeen
 }
