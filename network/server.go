@@ -12,6 +12,7 @@ var defaultBlockTime = time.Second * 5
 
 // ServerOptions
 type ServerOptions struct {
+	RPCHandler RPCHandler
 	Transports []Transport
 	BlockTime  time.Duration
 	PrivateKey *crypto.PrivateKey
@@ -33,14 +34,21 @@ func NewServer(options ServerOptions) *Server {
 		options.BlockTime = defaultBlockTime
 	}
 
-	return &Server{
-		options:     options,
+	server := &Server{
 		blockTime:   options.BlockTime,
 		memoryPool:  NewTransactionPool(),
 		isValidator: options.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
 	}
+
+	if options.RPCHandler == nil {
+		options.RPCHandler = NewDefaultRPCHandler(server)
+	}
+
+	server.options = options
+
+	return server
 }
 
 // Start starts the Server
@@ -52,7 +60,9 @@ LOOP:
 	for {
 		select {
 		case rpc := <-s.rpcCh:
-			fmt.Printf("%+v\n", rpc)
+			if err := s.options.RPCHandler.HandleRPC(rpc); err != nil {
+				log.Println(err)
+			}
 		case <-s.quitCh:
 			break LOOP
 		case <-ticker.C:
@@ -65,12 +75,8 @@ LOOP:
 	fmt.Println("Server shutdown...")
 }
 
-// handleTransaction handles new transaction from network and adds it into memory pool
-func (s *Server) handleTransaction(transaction *core.Transaction) error {
-	if err := transaction.Verify(); err != nil {
-		return err
-	}
-
+// ProcessTransaction handles new transaction from network and adds it into memory pool
+func (s *Server) ProcessTransaction(from NetworkAddress, transaction *core.Transaction) error {
 	hash := transaction.Hash(core.TransactionHasher{})
 
 	if s.memoryPool.Has(hash) {
@@ -78,6 +84,12 @@ func (s *Server) handleTransaction(transaction *core.Transaction) error {
 
 		return nil
 	}
+
+	if err := transaction.Verify(); err != nil {
+		return err
+	}
+
+	transaction.SetFirstSeen(time.Now().UnixNano())
 
 	log.Printf("adding new transaction with hash %s into mempool", hash)
 

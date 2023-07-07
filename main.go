@@ -1,7 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"github.com/evgeniy-dammer/blockchain/core"
+	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
+	"log"
+	"math/rand"
+	"strconv"
 	"time"
 )
 
@@ -17,7 +23,11 @@ func main() {
 	// message sending
 	go func() {
 		for {
-			remoteTransport.SendMessage(localTransport.Address(), []byte("Hello World!"))
+			// remoteTransport.SendMessage(localTransport.Address(), []byte("Hello World!"))
+			if err := sendTransaction(remoteTransport, localTransport.Address()); err != nil {
+				log.Printf("sending transaction fail: %s", err)
+			}
+
 			time.Sleep(1 * time.Second)
 		}
 	}()
@@ -27,4 +37,22 @@ func main() {
 	// creating and starting server
 	server := network.NewServer(options)
 	server.Start()
+}
+
+func sendTransaction(transport network.Transport, address network.NetworkAddress) error {
+	privKey := crypto.GeneratePrivateKey()
+	data := []byte(strconv.FormatInt(int64(rand.Intn(1000)), 10))
+
+	transaction := core.NewTransaction(data)
+	transaction.Sign(privKey)
+
+	buf := &bytes.Buffer{}
+
+	if err := transaction.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
+		return err
+	}
+
+	message := network.NewMessage(network.MessageTypeTransaction, buf.Bytes())
+
+	return transport.SendMessage(address, message.Bytes())
 }

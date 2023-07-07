@@ -3,12 +3,6 @@ package network
 // NetworkAddress
 type NetworkAddress string
 
-// RPC
-type RPC struct {
-	From    NetworkAddress
-	Payload []byte
-}
-
 // Transport interface
 type Transport interface {
 	Consume() <-chan RPC
