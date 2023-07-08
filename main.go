@@ -5,7 +5,7 @@ import (
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
-	"log"
+	"github.com/rs/zerolog/log"
 	"math/rand"
 	"strconv"
 	"time"
@@ -25,7 +25,7 @@ func main() {
 		for {
 			// remoteTransport.SendMessage(localTransport.Address(), []byte("Hello World!"))
 			if err := sendTransaction(remoteTransport, localTransport.Address()); err != nil {
-				log.Printf("sending transaction fail: %s", err)
+				log.Error().Msgf("sending transaction fail: %s", err)
 			}
 
 			time.Sleep(1 * time.Second)

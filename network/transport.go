@@ -8,5 +8,6 @@ type Transport interface {
 	Consume() <-chan RPC
 	Connect(transport Transport) error
 	SendMessage(to NetworkAddress, payload []byte) error
+	Broadcast([]byte) error
 	Address() NetworkAddress
 }

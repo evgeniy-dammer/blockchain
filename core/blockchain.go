@@ -2,7 +2,7 @@ package core
 
 import (
 	"fmt"
-	"log"
+	"github.com/rs/zerolog/log"
 	"sync"
 )
 
@@ -75,7 +75,7 @@ func (bc *Blockchain) addBlockWithoutValidation(block *Block) error {
 
 	bc.lock.RUnlock()
 
-	log.Printf("adding new block: height - %d, hash - %s", block.Header, block.Hash(BlockHasher{}))
+	log.Info().Msgf("adding new block: height - %d, hash - %s", block.Header, block.Hash(BlockHasher{}))
 
 	return bc.store.Put(block)
 }

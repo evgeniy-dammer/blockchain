@@ -3,7 +3,6 @@ package core
 import (
 	"crypto/elliptic"
 	"encoding/gob"
-	"errors"
 	"io"
 )
 
@@ -27,17 +26,4 @@ func NewGobTransactionEncoder(w io.Writer) *GobTransactionEncoder {
 // Encode encodes the transaction
 func (e *GobTransactionEncoder) Encode(transaction *Transaction) error {
 	return gob.NewEncoder(e.W).Encode(transaction)
-}
-
-type P256Curve struct{}
-
-func (P256Curve) GobEncode() ([]byte, error) {
-	return []byte("P-256"), nil
-}
-
-func (P256Curve) GobDecode(data []byte) error {
-	if string(data) != "P-256" {
-		return errors.New("invalid data for P256Curve")
-	}
-	return nil
 }

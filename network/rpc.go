@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
+	"github.com/rs/zerolog/log"
 	"io"
 )
 
@@ -44,44 +45,43 @@ func (m *Message) Bytes() []byte {
 	return buf.Bytes()
 }
 
-// RPCHandler
-type RPCHandler interface {
-	HandleRPC(rpc RPC) error
+// DecodedMessage
+type DecodedMessage struct {
+	From NetworkAddress
+	Data any
 }
 
-// DefaultRPCHandler
-type DefaultRPCHandler struct {
-	processor RPCProcessor
-}
+// RPCDecodeFunc
+type RPCDecodeFunc func(RPC) (*DecodedMessage, error)
 
-// NewDefaultRPCHandler is a constructor for the DefaultRPCHandler
-func NewDefaultRPCHandler(processor RPCProcessor) *DefaultRPCHandler {
-	return &DefaultRPCHandler{processor: processor}
-}
-
-// HandleRPC handles the rpc, decodes id and forvards for processing
-func (h *DefaultRPCHandler) HandleRPC(rpc RPC) error {
+// DefaultRPCDecodeFunc returns a decoded message fetched from peers
+func DefaultRPCDecodeFunc(rpc RPC) (*DecodedMessage, error) {
 	message := Message{}
 
 	if err := gob.NewDecoder(rpc.Payload).Decode(&message); err != nil {
-		return fmt.Errorf("failed to decode message from %s: %s", rpc.From, err)
+		return nil, fmt.Errorf("failed to decode message from %s: %s", rpc.From, err)
 	}
+
+	log.Info().Msgf("receives a new message from %s with %x type", rpc.From, message.Type)
 
 	switch message.Type {
 	case MessageTypeTransaction:
 		transaction := new(core.Transaction)
 
 		if err := transaction.Decode(core.NewGobTransactionDecoder(bytes.NewReader(message.Data))); err != nil {
-			return err
+			return nil, err
 		}
 
-		return h.processor.ProcessTransaction(rpc.From, transaction)
+		return &DecodedMessage{
+			From: rpc.From,
+			Data: transaction,
+		}, nil
 	default:
-		return fmt.Errorf("invalid message type %x", message.Type)
+		return nil, fmt.Errorf("invalid message type %x", message.Type)
 	}
 }
 
 // RPCProcessor
 type RPCProcessor interface {
-	ProcessTransaction(address NetworkAddress, transaction *core.Transaction) error
+	ProcessMessage(message *DecodedMessage) error
 }

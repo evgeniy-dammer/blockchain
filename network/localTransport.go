@@ -57,6 +57,17 @@ func (t *LocalTransport) SendMessage(to NetworkAddress, payload []byte) error {
 	return nil
 }
 
+// Broadcast sends message to all peers
+func (t *LocalTransport) Broadcast(payload []byte) error {
+	for _, peer := range t.peers {
+		if err := t.SendMessage(peer.address, payload); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Address returns transports network address
 func (t *LocalTransport) Address() NetworkAddress {
 	return t.address

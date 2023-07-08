@@ -1,10 +1,11 @@
 package network
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
-	"log"
+	"github.com/rs/zerolog/log"
 	"time"
 )
 
@@ -12,16 +13,16 @@ var defaultBlockTime = time.Second * 5
 
 // ServerOptions
 type ServerOptions struct {
-	RPCHandler RPCHandler
-	Transports []Transport
-	BlockTime  time.Duration
-	PrivateKey *crypto.PrivateKey
+	RPCDecodeFunc RPCDecodeFunc
+	RPCProcessor  RPCProcessor
+	Transports    []Transport
+	BlockTime     time.Duration
+	PrivateKey    *crypto.PrivateKey
 }
 
 // Server
 type Server struct {
 	options     ServerOptions
-	blockTime   time.Duration
 	memoryPool  *TransactionPool
 	isValidator bool
 	rpcCh       chan RPC
@@ -34,19 +35,21 @@ func NewServer(options ServerOptions) *Server {
 		options.BlockTime = defaultBlockTime
 	}
 
+	if options.RPCDecodeFunc == nil {
+		options.RPCDecodeFunc = DefaultRPCDecodeFunc
+	}
+
 	server := &Server{
-		blockTime:   options.BlockTime,
+		options:     options,
 		memoryPool:  NewTransactionPool(),
 		isValidator: options.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
 	}
 
-	if options.RPCHandler == nil {
-		options.RPCHandler = NewDefaultRPCHandler(server)
+	if server.options.RPCProcessor == nil {
+		server.options.RPCProcessor = server
 	}
-
-	server.options = options
 
 	return server
 }
@@ -54,14 +57,20 @@ func NewServer(options ServerOptions) *Server {
 // Start starts the Server
 func (s *Server) Start() {
 	s.initTransports()
-	ticker := time.NewTicker(s.blockTime)
+	ticker := time.NewTicker(s.options.BlockTime)
 
 LOOP:
 	for {
 		select {
 		case rpc := <-s.rpcCh:
-			if err := s.options.RPCHandler.HandleRPC(rpc); err != nil {
-				log.Println(err)
+			message, err := s.options.RPCDecodeFunc(rpc)
+
+			if err != nil {
+				log.Error().Msgf("rpc decoding failed: %s", err)
+			}
+
+			if err = s.options.RPCProcessor.ProcessMessage(message); err != nil {
+				log.Error().Msgf("message processing failed: %s", err)
 			}
 		case <-s.quitCh:
 			break LOOP
@@ -75,12 +84,22 @@ LOOP:
 	fmt.Println("Server shutdown...")
 }
 
-// ProcessTransaction handles new transaction from network and adds it into memory pool
-func (s *Server) ProcessTransaction(from NetworkAddress, transaction *core.Transaction) error {
+// ProcessMessage checks message type and process it
+func (s *Server) ProcessMessage(message *DecodedMessage) error {
+	switch t := message.Data.(type) {
+	case *core.Transaction:
+		return s.processTransaction(t)
+	}
+
+	return nil
+}
+
+// processTransaction handles new transaction from network and adds it into memory pool
+func (s *Server) processTransaction(transaction *core.Transaction) error {
 	hash := transaction.Hash(core.TransactionHasher{})
 
 	if s.memoryPool.Has(hash) {
-		log.Printf("transaction with hash %s is already in mempool", hash)
+		log.Info().Msgf("transaction with hash %s is already in mempool", hash)
 
 		return nil
 	}
@@ -91,9 +110,39 @@ func (s *Server) ProcessTransaction(from NetworkAddress, transaction *core.Trans
 
 	transaction.SetFirstSeen(time.Now().UnixNano())
 
-	log.Printf("adding new transaction with hash %s into mempool", hash)
+	log.Info().Msgf("adding new transaction with hash %s into mempool", hash)
+
+	go func() {
+		if err := s.broadcastTransaction(transaction); err != nil {
+			log.Error().Msgf("transaction broadcasting failed: %s", err)
+		}
+	}()
 
 	return s.memoryPool.Add(transaction)
+}
+
+// broadcast broadcasts a payload to all transports
+func (s *Server) broadcast(payload []byte) error {
+	for _, transport := range s.options.Transports {
+		if err := transport.Broadcast(payload); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// broadcastTransaction encodes transaction and broadcasts the message
+func (s *Server) broadcastTransaction(transaction *core.Transaction) error {
+	buf := &bytes.Buffer{}
+
+	if err := transaction.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
+		return err
+	}
+
+	message := NewMessage(MessageTypeTransaction, buf.Bytes())
+
+	return s.broadcast(message.Bytes())
 }
 
 // createNewBlock creates a new block
