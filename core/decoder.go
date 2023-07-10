@@ -1,7 +1,6 @@
 package core
 
 import (
-	"crypto/elliptic"
 	"encoding/gob"
 	"io"
 )
@@ -18,7 +17,7 @@ type GobTransactionDecoder struct {
 
 // NewGobTransactionDecoder is a constructor for the GobTransactionDecoder
 func NewGobTransactionDecoder(r io.Reader) *GobTransactionDecoder {
-	gob.Register(elliptic.P256())
+	//gob.Register(elliptic.P256())
 
 	return &GobTransactionDecoder{r: r}
 }

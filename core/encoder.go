@@ -1,7 +1,6 @@
 package core
 
 import (
-	"crypto/elliptic"
 	"encoding/gob"
 	"io"
 )
@@ -13,17 +12,17 @@ type Encoder[T any] interface {
 
 // GobTransactionEncoder
 type GobTransactionEncoder struct {
-	W io.Writer
+	w io.Writer
 }
 
 // NewGobTransactionEncoder is a constructor for the GobTransactionEncoder
 func NewGobTransactionEncoder(w io.Writer) *GobTransactionEncoder {
-	gob.Register(elliptic.P256())
+	//gob.Register(elliptic.P256())
 
-	return &GobTransactionEncoder{W: w}
+	return &GobTransactionEncoder{w: w}
 }
 
 // Encode encodes the transaction
 func (e *GobTransactionEncoder) Encode(transaction *Transaction) error {
-	return gob.NewEncoder(e.W).Encode(transaction)
+	return gob.NewEncoder(e.w).Encode(transaction)
 }

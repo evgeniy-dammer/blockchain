@@ -32,10 +32,20 @@ func main() {
 		}
 	}()
 
-	options := network.ServerOptions{Transports: []network.Transport{localTransport}}
+	privateKey := crypto.GeneratePrivateKey()
+
+	options := network.ServerOptions{
+		PrivateKey: &privateKey,
+		ID:         "LOCAL",
+		Transports: []network.Transport{localTransport},
+	}
 
 	// creating and starting server
-	server := network.NewServer(options)
+	server, err := network.NewServer(options)
+	if err != nil {
+		log.Fatal().Msgf("server error: %s", err)
+	}
+
 	server.Start()
 }
 

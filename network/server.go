@@ -2,10 +2,11 @@ package network
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
-	"github.com/rs/zerolog/log"
+	"github.com/evgeniy-dammer/blockchain/types"
+	"github.com/go-kit/log"
+	"os"
 	"time"
 )
 
@@ -13,6 +14,8 @@ var defaultBlockTime = time.Second * 5
 
 // ServerOptions
 type ServerOptions struct {
+	ID            string
+	Logger        log.Logger
 	RPCDecodeFunc RPCDecodeFunc
 	RPCProcessor  RPCProcessor
 	Transports    []Transport
@@ -24,13 +27,14 @@ type ServerOptions struct {
 type Server struct {
 	options     ServerOptions
 	memoryPool  *TransactionPool
+	chain       *core.Blockchain
 	isValidator bool
 	rpcCh       chan RPC
 	quitCh      chan struct{}
 }
 
 // NewServer is a constructor for the Server
-func NewServer(options ServerOptions) *Server {
+func NewServer(options ServerOptions) (*Server, error) {
 	if options.BlockTime == time.Duration(0) {
 		options.BlockTime = defaultBlockTime
 	}
@@ -39,9 +43,20 @@ func NewServer(options ServerOptions) *Server {
 		options.RPCDecodeFunc = DefaultRPCDecodeFunc
 	}
 
+	if options.Logger == nil {
+		options.Logger = log.NewLogfmtLogger(os.Stderr)
+		options.Logger = log.With(options.Logger, "ID", options.ID)
+	}
+
+	chain, err := core.NewBlockchain(genesisBlock())
+	if err != nil {
+		return nil, err
+	}
+
 	server := &Server{
 		options:     options,
 		memoryPool:  NewTransactionPool(),
+		chain:       chain,
 		isValidator: options.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
 		quitCh:      make(chan struct{}, 1),
@@ -51,13 +66,16 @@ func NewServer(options ServerOptions) *Server {
 		server.options.RPCProcessor = server
 	}
 
-	return server
+	if server.isValidator {
+		go server.validatorLoop()
+	}
+
+	return server, nil
 }
 
 // Start starts the Server
 func (s *Server) Start() {
 	s.initTransports()
-	ticker := time.NewTicker(s.options.BlockTime)
 
 LOOP:
 	for {
@@ -66,22 +84,29 @@ LOOP:
 			message, err := s.options.RPCDecodeFunc(rpc)
 
 			if err != nil {
-				log.Error().Msgf("rpc decoding failed: %s", err)
+				s.options.Logger.Log("error", err)
 			}
 
 			if err = s.options.RPCProcessor.ProcessMessage(message); err != nil {
-				log.Error().Msgf("message processing failed: %s", err)
+				s.options.Logger.Log("error", err)
 			}
 		case <-s.quitCh:
 			break LOOP
-		case <-ticker.C:
-			if s.isValidator {
-				s.createNewBlock()
-			}
 		}
 	}
 
-	fmt.Println("Server shutdown...")
+	s.options.Logger.Log("msg", "server shutdown...")
+}
+
+func (s *Server) validatorLoop() {
+	ticker := time.NewTicker(s.options.BlockTime)
+
+	s.options.Logger.Log("msg", "starting validator loop...", "blocktime", s.options.BlockTime)
+
+	for {
+		<-ticker.C
+		s.createNewBlock()
+	}
 }
 
 // ProcessMessage checks message type and process it
@@ -99,8 +124,6 @@ func (s *Server) processTransaction(transaction *core.Transaction) error {
 	hash := transaction.Hash(core.TransactionHasher{})
 
 	if s.memoryPool.Has(hash) {
-		log.Info().Msgf("transaction with hash %s is already in mempool", hash)
-
 		return nil
 	}
 
@@ -110,11 +133,11 @@ func (s *Server) processTransaction(transaction *core.Transaction) error {
 
 	transaction.SetFirstSeen(time.Now().UnixNano())
 
-	log.Info().Msgf("adding new transaction with hash %s into mempool", hash)
+	s.options.Logger.Log("msg", "adding new transaction to mempool", "hash", hash, "mempoolLen", s.memoryPool.Len())
 
 	go func() {
 		if err := s.broadcastTransaction(transaction); err != nil {
-			log.Error().Msgf("transaction broadcasting failed: %s", err)
+			s.options.Logger.Log("error", err)
 		}
 	}()
 
@@ -145,13 +168,6 @@ func (s *Server) broadcastTransaction(transaction *core.Transaction) error {
 	return s.broadcast(message.Bytes())
 }
 
-// createNewBlock creates a new block
-func (s *Server) createNewBlock() error {
-	fmt.Println("creating a new block...")
-
-	return nil
-}
-
 // initTransports initializes Transports
 func (s *Server) initTransports() {
 	for _, tr := range s.options.Transports {
@@ -161,4 +177,41 @@ func (s *Server) initTransports() {
 			}
 		}(tr)
 	}
+}
+
+// createNewBlock creates a new block
+func (s *Server) createNewBlock() error {
+	s.options.Logger.Log("msg", "creating a new block...")
+
+	currentHeader, err := s.chain.GetHeader(s.chain.Height())
+	if err != nil {
+		return err
+	}
+
+	block, err := core.NewBlockFromPreviousHeader(currentHeader, nil)
+	if err != nil {
+		return err
+	}
+
+	if err = block.Sign(*s.options.PrivateKey); err != nil {
+		return err
+	}
+
+	if err = s.chain.AddBlock(block); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// genesisBlock returns a genesis block
+func genesisBlock() *core.Block {
+	header := &core.Header{
+		Version:   1,
+		DataHash:  types.Hash{},
+		Timestamp: time.Now().UnixNano(),
+		Height:    0,
+	}
+
+	return core.NewBlock(header, nil)
 }
