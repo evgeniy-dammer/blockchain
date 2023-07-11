@@ -2,12 +2,13 @@ package core
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
+	"github.com/go-kit/log"
 	"sync"
 )
 
 // Blockchain
 type Blockchain struct {
+	logger    log.Logger
 	store     Storage
 	lock      sync.RWMutex
 	headers   []*Header
@@ -15,8 +16,8 @@ type Blockchain struct {
 }
 
 // NewBlockchain is a constructor for the Blockchain
-func NewBlockchain(genesis *Block) (*Blockchain, error) {
-	blockchain := &Blockchain{headers: []*Header{}, store: NewMemoryStore()}
+func NewBlockchain(logger log.Logger, genesis *Block) (*Blockchain, error) {
+	blockchain := &Blockchain{headers: []*Header{}, store: NewMemoryStore(), logger: logger}
 	blockchain.validator = NewBlockValidator(blockchain)
 
 	err := blockchain.addBlockWithoutValidation(genesis)
@@ -75,7 +76,12 @@ func (bc *Blockchain) addBlockWithoutValidation(block *Block) error {
 
 	bc.lock.RUnlock()
 
-	log.Info().Msgf("adding new block: height - %d, hash - %s", block.Header, block.Hash(BlockHasher{}))
+	bc.logger.Log(
+		"msg", "adding new block",
+		"height", block.Header.Height,
+		"hash", block.Hash(BlockHasher{}),
+		"transactions", len(block.Transactions),
+	)
 
 	return bc.store.Put(block)
 }

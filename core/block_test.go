@@ -19,7 +19,7 @@ func randomBlock(t *testing.T, height uint32, prevBlockHash types.Hash) *Block {
 		Height:            height,
 	}
 
-	b := NewBlock(header, []Transaction{tx})
+	b := NewBlock(header, []*Transaction{tx})
 
 	dataHash, err := CalculateDataHash(b.Transactions)
 	assert.Nil(t, err)

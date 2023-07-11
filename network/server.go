@@ -48,7 +48,7 @@ func NewServer(options ServerOptions) (*Server, error) {
 		options.Logger = log.With(options.Logger, "ID", options.ID)
 	}
 
-	chain, err := core.NewBlockchain(genesisBlock())
+	chain, err := core.NewBlockchain(options.Logger, genesisBlock())
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +98,7 @@ LOOP:
 	s.options.Logger.Log("msg", "server shutdown...")
 }
 
+// validatorLoop runs a creating new block loop if node is validator
 func (s *Server) validatorLoop() {
 	ticker := time.NewTicker(s.options.BlockTime)
 
@@ -144,6 +145,12 @@ func (s *Server) processTransaction(transaction *core.Transaction) error {
 	return s.memoryPool.Add(transaction)
 }
 
+// broadcastBlock encodes a block and broadcasts the message
+func (s *Server) broadcastBlock(block *core.Block) error {
+
+	return nil
+}
+
 // broadcast broadcasts a payload to all transports
 func (s *Server) broadcast(payload []byte) error {
 	for _, transport := range s.options.Transports {
@@ -155,7 +162,7 @@ func (s *Server) broadcast(payload []byte) error {
 	return nil
 }
 
-// broadcastTransaction encodes transaction and broadcasts the message
+// broadcastTransaction encodes a transaction and broadcasts the message
 func (s *Server) broadcastTransaction(transaction *core.Transaction) error {
 	buf := &bytes.Buffer{}
 
@@ -188,7 +195,13 @@ func (s *Server) createNewBlock() error {
 		return err
 	}
 
-	block, err := core.NewBlockFromPreviousHeader(currentHeader, nil)
+	// For now, we are going to use all transactions, that are in the memory pool.
+	// Later on when we know the internal structure of our transaction we will
+	// implement some kind of complexity function to determine how many transactions
+	// can be included to the block
+	transactions := s.memoryPool.Transactions()
+
+	block, err := core.NewBlockFromPreviousHeader(currentHeader, transactions)
 	if err != nil {
 		return err
 	}
@@ -201,6 +214,8 @@ func (s *Server) createNewBlock() error {
 		return err
 	}
 
+	s.memoryPool.Flush()
+
 	return nil
 }
 
@@ -209,7 +224,7 @@ func genesisBlock() *core.Block {
 	header := &core.Header{
 		Version:   1,
 		DataHash:  types.Hash{},
-		Timestamp: time.Now().UnixNano(),
+		Timestamp: 000000,
 		Height:    0,
 	}
 

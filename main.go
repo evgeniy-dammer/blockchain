@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
-	"github.com/rs/zerolog/log"
+	"log"
 	"math/rand"
 	"strconv"
 	"time"
@@ -14,39 +15,58 @@ import (
 func main() {
 	// transports creating
 	localTransport := network.NewLocalTransport("LOCAL")
-	remoteTransport := network.NewLocalTransport("REMOTE")
+	remoteTransportA := network.NewLocalTransport("REMOTE_A")
+	remoteTransportB := network.NewLocalTransport("REMOTE_B")
+	remoteTransportC := network.NewLocalTransport("REMOTE_C")
 
 	// transports connecting
-	localTransport.Connect(remoteTransport)
-	remoteTransport.Connect(localTransport)
+	localTransport.Connect(remoteTransportA)
+	remoteTransportA.Connect(remoteTransportB)
+	remoteTransportB.Connect(remoteTransportC)
+	remoteTransportA.Connect(localTransport)
+
+	initRemoteServers([]network.Transport{remoteTransportA, remoteTransportB, remoteTransportC})
 
 	// message sending
 	go func() {
 		for {
 			// remoteTransport.SendMessage(localTransport.Address(), []byte("Hello World!"))
-			if err := sendTransaction(remoteTransport, localTransport.Address()); err != nil {
-				log.Error().Msgf("sending transaction fail: %s", err)
+			if err := sendTransaction(remoteTransportA, localTransport.Address()); err != nil {
+				log.Printf("sending transaction fail: %s", err)
 			}
 
-			time.Sleep(1 * time.Second)
+			time.Sleep(2 * time.Second)
 		}
 	}()
 
 	privateKey := crypto.GeneratePrivateKey()
+	localServer := makeServer("LOCAL", localTransport, &privateKey)
 
+	localServer.Start()
+}
+
+func initRemoteServers(transports []network.Transport) {
+	for i := 0; i < len(transports); i++ {
+		id := fmt.Sprintf("REMOTE_%d", i)
+		s := makeServer(id, transports[i], nil)
+
+		go s.Start()
+	}
+}
+
+func makeServer(id string, transport network.Transport, privateKey *crypto.PrivateKey) *network.Server {
 	options := network.ServerOptions{
-		PrivateKey: &privateKey,
-		ID:         "LOCAL",
-		Transports: []network.Transport{localTransport},
+		PrivateKey: privateKey,
+		ID:         id,
+		Transports: []network.Transport{transport},
 	}
 
-	// creating and starting server
 	server, err := network.NewServer(options)
 	if err != nil {
-		log.Fatal().Msgf("server error: %s", err)
+		log.Fatal(err)
 	}
 
-	server.Start()
+	return server
 }
 
 func sendTransaction(transport network.Transport, address network.NetworkAddress) error {

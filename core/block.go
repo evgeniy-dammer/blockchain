@@ -33,22 +33,22 @@ func (h *Header) Bytes() []byte {
 // Block is a block of transactions
 type Block struct {
 	Header       *Header
-	Transactions []Transaction
+	Transactions []*Transaction
 	Validator    crypto.PublicKey
 	Signature    *crypto.Signature
 	hash         types.Hash // Cached version of the Header hash
 }
 
 // NewBlock is a constructor for the Block
-func NewBlock(header *Header, transactions []Transaction) *Block {
+func NewBlock(header *Header, transactions []*Transaction) *Block {
 	return &Block{
 		Header:       header,
 		Transactions: transactions,
 	}
 }
 
-// NewBlockFromPreviousHeader is a constructor for the Block with previous header
-func NewBlockFromPreviousHeader(previousHeader *Header, transactions []Transaction) (*Block, error) {
+// NewBlockFromPreviousHeader is a constructor for the Block with previous hash
+func NewBlockFromPreviousHeader(previousHeader *Header, transactions []*Transaction) (*Block, error) {
 	dataHash, err := CalculateDataHash(transactions)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func NewBlockFromPreviousHeader(previousHeader *Header, transactions []Transacti
 
 // AddTransaction adds Transaction to Blockchain
 func (b *Block) AddTransaction(tx *Transaction) {
-	b.Transactions = append(b.Transactions, *tx)
+	b.Transactions = append(b.Transactions, tx)
 }
 
 // Sign signs a Block data
@@ -132,7 +132,7 @@ func (b *Block) Hash(hasher Hasher[*Header]) types.Hash {
 }
 
 // CalculateDataHash calculates hash of given transactions
-func CalculateDataHash(transactions []Transaction) (hash types.Hash, err error) {
+func CalculateDataHash(transactions []*Transaction) (hash types.Hash, err error) {
 	buf := &bytes.Buffer{}
 
 	for _, transaction := range transactions {
