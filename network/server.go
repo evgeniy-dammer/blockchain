@@ -55,7 +55,7 @@ func NewServer(options ServerOptions) (*Server, error) {
 
 	server := &Server{
 		options:     options,
-		memoryPool:  NewTransactionPool(),
+		memoryPool:  NewTransactionPool(1000),
 		chain:       chain,
 		isValidator: options.PrivateKey != nil,
 		rpcCh:       make(chan RPC),
@@ -115,6 +115,8 @@ func (s *Server) ProcessMessage(message *DecodedMessage) error {
 	switch t := message.Data.(type) {
 	case *core.Transaction:
 		return s.processTransaction(t)
+	case *core.Block:
+		return s.processBlock(t)
 	}
 
 	return nil
@@ -124,7 +126,7 @@ func (s *Server) ProcessMessage(message *DecodedMessage) error {
 func (s *Server) processTransaction(transaction *core.Transaction) error {
 	hash := transaction.Hash(core.TransactionHasher{})
 
-	if s.memoryPool.Has(hash) {
+	if s.memoryPool.Contains(hash) {
 		return nil
 	}
 
@@ -132,9 +134,7 @@ func (s *Server) processTransaction(transaction *core.Transaction) error {
 		return err
 	}
 
-	transaction.SetFirstSeen(time.Now().UnixNano())
-
-	s.options.Logger.Log("msg", "adding new transaction to mempool", "hash", hash, "mempoolLen", s.memoryPool.Len())
+	//s.options.Logger.Log("msg", "adding new transaction to mempool", "hash", hash, "mempoolPending", s.memoryPool.PendingCount())
 
 	go func() {
 		if err := s.broadcastTransaction(transaction); err != nil {
@@ -142,13 +142,32 @@ func (s *Server) processTransaction(transaction *core.Transaction) error {
 		}
 	}()
 
-	return s.memoryPool.Add(transaction)
+	s.memoryPool.Add(transaction)
+
+	return nil
+}
+
+func (s *Server) processBlock(b *core.Block) error {
+	if err := s.chain.AddBlock(b); err != nil {
+		return err
+	}
+
+	go s.broadcastBlock(b)
+
+	return nil
 }
 
 // broadcastBlock encodes a block and broadcasts the message
 func (s *Server) broadcastBlock(block *core.Block) error {
+	buf := &bytes.Buffer{}
 
-	return nil
+	if err := block.Encode(core.NewGobBlockEncoder(buf)); err != nil {
+		return err
+	}
+
+	message := NewMessage(MessageTypeBlock, buf.Bytes())
+
+	return s.broadcast(message.Bytes())
 }
 
 // broadcast broadcasts a payload to all transports
@@ -188,8 +207,6 @@ func (s *Server) initTransports() {
 
 // createNewBlock creates a new block
 func (s *Server) createNewBlock() error {
-	s.options.Logger.Log("msg", "creating a new block...")
-
 	currentHeader, err := s.chain.GetHeader(s.chain.Height())
 	if err != nil {
 		return err
@@ -199,7 +216,7 @@ func (s *Server) createNewBlock() error {
 	// Later on when we know the internal structure of our transaction we will
 	// implement some kind of complexity function to determine how many transactions
 	// can be included to the block
-	transactions := s.memoryPool.Transactions()
+	transactions := s.memoryPool.Pending()
 
 	block, err := core.NewBlockFromPreviousHeader(currentHeader, transactions)
 	if err != nil {
@@ -214,7 +231,9 @@ func (s *Server) createNewBlock() error {
 		return err
 	}
 
-	s.memoryPool.Flush()
+	s.memoryPool.ClearPending()
+
+	go s.broadcastBlock(block)
 
 	return nil
 }
@@ -228,5 +247,6 @@ func genesisBlock() *core.Block {
 		Height:    0,
 	}
 
-	return core.NewBlock(header, nil)
+	b, _ := core.NewBlock(header, nil)
+	return b
 }

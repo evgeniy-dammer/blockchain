@@ -40,11 +40,11 @@ type Block struct {
 }
 
 // NewBlock is a constructor for the Block
-func NewBlock(header *Header, transactions []*Transaction) *Block {
+func NewBlock(header *Header, transactions []*Transaction) (*Block, error) {
 	return &Block{
 		Header:       header,
 		Transactions: transactions,
-	}
+	}, nil
 }
 
 // NewBlockFromPreviousHeader is a constructor for the Block with previous hash
@@ -62,7 +62,7 @@ func NewBlockFromPreviousHeader(previousHeader *Header, transactions []*Transact
 		Timestamp:         time.Now().UnixNano(),
 	}
 
-	return NewBlock(header, transactions), nil
+	return NewBlock(header, transactions)
 }
 
 // AddTransaction adds Transaction to Blockchain

@@ -2,12 +2,13 @@ package core
 
 import (
 	"github.com/evgeniy-dammer/blockchain/types"
+	"github.com/go-kit/log"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func newBlockchainWithGenesis(t *testing.T) *Blockchain {
-	blockchain, err := NewBlockchain(randomBlock(t, 0, types.Hash{}))
+	blockchain, err := NewBlockchain(log.NewNopLogger(), randomBlock(t, 0, types.Hash{}))
 
 	assert.Nil(t, err)
 

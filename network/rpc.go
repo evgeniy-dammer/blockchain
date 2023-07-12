@@ -11,7 +11,8 @@ import (
 
 const (
 	MessageTypeTransaction MessageType = 0x1
-	MessageTypeBlock
+	MessageTypeBlock       MessageType = 0x2
+	MessageTypeGetBlocks   MessageType = 0x3
 )
 
 // RPC
@@ -75,6 +76,16 @@ func DefaultRPCDecodeFunc(rpc RPC) (*DecodedMessage, error) {
 		return &DecodedMessage{
 			From: rpc.From,
 			Data: transaction,
+		}, nil
+	case MessageTypeBlock:
+		block := new(core.Block)
+		if err := block.Decode(core.NewGobBlockDecoder(bytes.NewReader(message.Data))); err != nil {
+			return nil, err
+		}
+
+		return &DecodedMessage{
+			From: rpc.From,
+			Data: block,
 		}, nil
 	default:
 		return nil, fmt.Errorf("invalid message type %x", message.Type)

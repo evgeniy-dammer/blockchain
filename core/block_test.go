@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
 	"github.com/stretchr/testify/assert"
@@ -19,8 +20,8 @@ func randomBlock(t *testing.T, height uint32, prevBlockHash types.Hash) *Block {
 		Height:            height,
 	}
 
-	b := NewBlock(header, []*Transaction{tx})
-
+	b, err := NewBlock(header, []*Transaction{tx})
+	assert.Nil(t, err)
 	dataHash, err := CalculateDataHash(b.Transactions)
 	assert.Nil(t, err)
 
@@ -53,4 +54,14 @@ func TestBlock_Verify(t *testing.T) {
 	block.Header.Height = 100
 
 	assert.NotNil(t, block.Verify())
+}
+
+func TestBlock_EncodeDecode(t *testing.T) {
+	b := randomBlock(t, 1, types.Hash{})
+	buf := &bytes.Buffer{}
+	assert.Nil(t, b.Encode(NewGobBlockEncoder(buf)))
+
+	bDecode := new(Block)
+	assert.Nil(t, bDecode.Decode(NewGobBlockDecoder(buf)))
+	assert.Equal(t, b, bDecode)
 }
