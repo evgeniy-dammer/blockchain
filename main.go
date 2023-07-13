@@ -7,8 +7,6 @@ import (
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
 	"log"
-	"math/rand"
-	"strconv"
 	"time"
 )
 
@@ -81,7 +79,7 @@ func makeServer(id string, transport network.Transport, privateKey *crypto.Priva
 
 func sendTransaction(transport network.Transport, address network.NetworkAddress) error {
 	privKey := crypto.GeneratePrivateKey()
-	data := []byte(strconv.FormatInt(int64(rand.Intn(1000)), 10))
+	data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
 
 	transaction := core.NewTransaction(data)
 	transaction.Sign(privKey)
