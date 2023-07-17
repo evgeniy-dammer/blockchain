@@ -37,7 +37,7 @@ func main() {
 		}
 	}()
 
-	go func() {
+	/*go func() {
 		time.Sleep(7 * time.Second)
 
 		lateTransport := network.NewLocalTransport("LATE_REMOTE")
@@ -45,7 +45,7 @@ func main() {
 		lateServer := makeServer(string(lateTransport.Address()), lateTransport, nil)
 
 		go lateServer.Start()
-	}()
+	}() */
 
 	privateKey := crypto.GeneratePrivateKey()
 	localServer := makeServer("LOCAL", localTransport, &privateKey)
@@ -79,6 +79,7 @@ func makeServer(id string, transport network.Transport, privateKey *crypto.Priva
 
 func sendTransaction(transport network.Transport, address network.NetworkAddress) error {
 	privKey := crypto.GeneratePrivateKey()
+	//data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
 	data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
 
 	transaction := core.NewTransaction(data)

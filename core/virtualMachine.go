@@ -1,13 +1,16 @@
 package core
 
+import "encoding/binary"
+
 type Instruction byte
 
 const (
 	InstructionPushInt  Instruction = 0x0a
-	instructionAdd      Instruction = 0x0b
+	InstructionAdd      Instruction = 0x0b
 	InstructionPushByte Instruction = 0x0c
 	InstructionPack     Instruction = 0x0d
 	InstructionSub      Instruction = 0x0e
+	InstructionStore    Instruction = 0x0f
 )
 
 // Stack
@@ -44,14 +47,16 @@ type VirtualMachine struct {
 	data               []byte
 	instructionPointer int
 	stack              *Stack
+	contractState      *State
 }
 
 // NewVirtualMachine is a constructor for the VirtualMachine
-func NewVirtualMachine(data []byte) *VirtualMachine {
+func NewVirtualMachine(data []byte, contractState *State) *VirtualMachine {
 	return &VirtualMachine{
 		data:               data,
 		instructionPointer: 0,
 		stack:              NewStack(128),
+		contractState:      contractState,
 	}
 }
 
@@ -96,13 +101,41 @@ func (vm *VirtualMachine) Exec(instruction Instruction) error {
 		c := a - b
 
 		vm.stack.Push(c)
-	case instructionAdd:
+	case InstructionAdd:
 		a := vm.stack.Pop().(int)
 		b := vm.stack.Pop().(int)
 		c := a + b
 
 		vm.stack.Push(c)
+	case InstructionStore:
+		var (
+			key             = vm.stack.Pop().([]byte)
+			value           = vm.stack.Pop()
+			serializedValue []byte
+		)
+
+		switch v := value.(type) {
+		case int:
+			serializedValue = serializeInt64(int64(v))
+		default:
+			panic("TODO: unknown type")
+		}
+
+		vm.contractState.Put(key, serializedValue)
+
 	}
 
 	return nil
+}
+
+func serializeInt64(value int64) []byte {
+	buf := make([]byte, 8)
+
+	binary.LittleEndian.PutUint64(buf, uint64(value))
+
+	return buf
+}
+
+func deserializeInt64(b []byte) int64 {
+	return int64(binary.LittleEndian.Uint64(b))
 }
