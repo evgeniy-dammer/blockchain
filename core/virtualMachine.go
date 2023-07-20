@@ -11,6 +11,9 @@ const (
 	InstructionPack     Instruction = 0x0d
 	InstructionSub      Instruction = 0x0e
 	InstructionStore    Instruction = 0x0f
+	InstructionGet      Instruction = 0xae
+	InstructionMul      Instruction = 0xea
+	InstructionDiv      Instruction = 0xfd
 )
 
 // Stack
@@ -29,7 +32,8 @@ func NewStack(size int) *Stack {
 
 // Push pushes the given value at the end of the stack
 func (s *Stack) Push(value any) {
-	s.data[s.stackPointer] = value
+	s.data = append([]any{value}, s.data...)
+	//s.data[s.stackPointer] = value
 	s.stackPointer++
 }
 
@@ -122,7 +126,27 @@ func (vm *VirtualMachine) Exec(instruction Instruction) error {
 		}
 
 		vm.contractState.Put(key, serializedValue)
+	case InstructionGet:
+		key := vm.stack.Pop().([]byte)
 
+		value, err := vm.contractState.Get(key)
+		if err != nil {
+			return err
+		}
+
+		vm.stack.Push(value)
+	case InstructionMul:
+		a := vm.stack.Pop().(int)
+		b := vm.stack.Pop().(int)
+		c := a * b
+
+		vm.stack.Push(c)
+	case InstructionDiv:
+		a := vm.stack.Pop().(int)
+		b := vm.stack.Pop().(int)
+		c := a / b
+
+		vm.stack.Push(c)
 	}
 
 	return nil

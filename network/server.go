@@ -2,6 +2,8 @@ package network
 
 import (
 	"bytes"
+	"encoding/gob"
+	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
@@ -15,6 +17,7 @@ var defaultBlockTime = time.Second * 5
 // ServerOptions
 type ServerOptions struct {
 	ID            string
+	Transport     Transport
 	Logger        log.Logger
 	RPCDecodeFunc RPCDecodeFunc
 	RPCProcessor  RPCProcessor
@@ -70,6 +73,15 @@ func NewServer(options ServerOptions) (*Server, error) {
 		go server.validatorLoop()
 	}
 
+	// tr := s.Transports[0].(*LocalTransport)
+
+	// fmt.Printf("%+v\n", tr.peers)
+	// for _, tr := range s.Transports {
+	// 	if err := s.sendGetStatusMessage(tr); err != nil {
+	// 		s.Logger.Log("send get status error", err)
+	// 	}
+	// }
+
 	return server, nil
 }
 
@@ -117,9 +129,60 @@ func (s *Server) ProcessMessage(message *DecodedMessage) error {
 		return s.processTransaction(t)
 	case *core.Block:
 		return s.processBlock(t)
+	case *GetStatusMessage:
+		return s.processGetStatusMessage(message.From, t)
+	case *StatusMessage:
+		return s.processStatusMessage(message.From, t)
 	}
 
 	return nil
+}
+
+// sendGetStatusMessage normally Transport which is our own transport should do the trick.
+func (s *Server) sendGetStatusMessage(tr Transport) error {
+	var (
+		getStatusMsg = new(GetStatusMessage)
+		buf          = new(bytes.Buffer)
+	)
+
+	if err := gob.NewEncoder(buf).Encode(getStatusMsg); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeGetStatus, buf.Bytes())
+
+	if err := tr.SendMessage(tr.Address(), msg.Bytes()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// processStatusMessage
+func (s *Server) processStatusMessage(from NetworkAddress, data *StatusMessage) error {
+	fmt.Printf("=> received GetStatus response msg from %s => %+v\n", from, data)
+
+	return nil
+}
+
+// processGetStatusMessage
+func (s *Server) processGetStatusMessage(from NetworkAddress, data *GetStatusMessage) error {
+	fmt.Printf("=> received Getstatus msg from %s => %+v\n", from, data)
+
+	statusMessage := &StatusMessage{
+		CurrentHeight: s.chain.Height(),
+		ID:            s.options.ID,
+	}
+
+	buf := new(bytes.Buffer)
+	
+	if err := gob.NewEncoder(buf).Encode(statusMessage); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeStatus, buf.Bytes())
+
+	return s.options.Transport.SendMessage(from, msg.Bytes())
 }
 
 // processTransaction handles new transaction from network and adds it into memory pool
@@ -147,6 +210,7 @@ func (s *Server) processTransaction(transaction *core.Transaction) error {
 	return nil
 }
 
+// processBlock adds block to servers chain and broadcasts the block
 func (s *Server) processBlock(b *core.Block) error {
 	if err := s.chain.AddBlock(b); err != nil {
 		return err
