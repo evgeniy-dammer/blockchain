@@ -11,51 +11,28 @@ import (
 	"time"
 )
 
+var transports = []network.Transport{
+	network.NewLocalTransport("LOCAL"),
+	// network.NewLocalTransport("REMOTE_B"),
+	// network.NewLocalTransport("REMOTE_C"),
+}
+
 func main() {
-	// transports creating
-	localTransport := network.NewLocalTransport("LOCAL")
-	remoteTransportA := network.NewLocalTransport("REMOTE_A")
-	remoteTransportB := network.NewLocalTransport("REMOTE_B")
-	remoteTransportC := network.NewLocalTransport("REMOTE_C")
+	initRemoteServers(transports)
+	localNode := transports[0]
+	trLate := network.NewLocalTransport("LATE_NODE")
+	// remoteNodeA := transports[1]
+	// remoteNodeC := transports[3]
 
-	// transports connecting
-	localTransport.Connect(remoteTransportA)
-	remoteTransportA.Connect(remoteTransportB)
-	remoteTransportB.Connect(remoteTransportC)
-	remoteTransportB.Connect(remoteTransportA)
-	remoteTransportA.Connect(localTransport)
-
-	initRemoteServers([]network.Transport{remoteTransportA, remoteTransportB, remoteTransportC})
-
-	// message sending
 	go func() {
-		for {
-			// remoteTransport.SendMessage(localTransport.Address(), []byte("Hello World!"))
-			if err := sendTransaction(remoteTransportA, localTransport.Address()); err != nil {
-				log.Printf("sending transaction fail: %s", err)
-			}
-
-			time.Sleep(2 * time.Second)
-		}
+		time.Sleep(7 * time.Second)
+		lateServer := makeServer(string(trLate.Address()), trLate, nil)
+		go lateServer.Start()
 	}()
 
-	if err := sendGetStatusMessage(remoteTransportA, "REMOTE_B"); err != nil {
-		log.Fatal(err)
-	}
+	privKey := crypto.GeneratePrivateKey()
 
-	/*go func() {
-		time.Sleep(7 * time.Second)
-
-		lateTransport := network.NewLocalTransport("LATE_REMOTE")
-		remoteTransportC.Connect(lateTransport)
-		lateServer := makeServer(string(lateTransport.Address()), lateTransport, nil)
-
-		go lateServer.Start()
-	}() */
-
-	privateKey := crypto.GeneratePrivateKey()
-	localServer := makeServer("LOCAL", localTransport, &privateKey)
-
+	localServer := makeServer("LOCAL", localNode, &privKey)
 	localServer.Start()
 }
 
@@ -73,7 +50,7 @@ func makeServer(id string, transport network.Transport, privateKey *crypto.Priva
 		Transport:  transport,
 		PrivateKey: privateKey,
 		ID:         id,
-		Transports: []network.Transport{transport},
+		Transports: transports,
 	}
 
 	server, err := network.NewServer(options)

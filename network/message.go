@@ -1,5 +1,10 @@
 package network
 
+type GetBlocksMessage struct {
+	From uint32
+	To   uint32 // If To is 0 the maximum blocks will be returned.
+}
+
 type GetStatusMessage struct{}
 
 type StatusMessage struct {

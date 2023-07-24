@@ -48,7 +48,7 @@ func NewServer(options ServerOptions) (*Server, error) {
 
 	if options.Logger == nil {
 		options.Logger = log.NewLogfmtLogger(os.Stderr)
-		options.Logger = log.With(options.Logger, "ID", options.ID)
+		options.Logger = log.With(options.Logger, "addr", options.Transport.Address())
 	}
 
 	chain, err := core.NewBlockchain(options.Logger, genesisBlock())
@@ -73,14 +73,7 @@ func NewServer(options ServerOptions) (*Server, error) {
 		go server.validatorLoop()
 	}
 
-	// tr := s.Transports[0].(*LocalTransport)
-
-	// fmt.Printf("%+v\n", tr.peers)
-	// for _, tr := range s.Transports {
-	// 	if err := s.sendGetStatusMessage(tr); err != nil {
-	// 		s.Logger.Log("send get status error", err)
-	// 	}
-	// }
+	server.boostrapNodes()
 
 	return server, nil
 }
@@ -100,7 +93,9 @@ LOOP:
 			}
 
 			if err = s.options.RPCProcessor.ProcessMessage(message); err != nil {
-				s.options.Logger.Log("error", err)
+				if err != core.ErrBlockKnown {
+					s.options.Logger.Log("error", err)
+				}
 			}
 		case <-s.quitCh:
 			break LOOP
@@ -133,9 +128,62 @@ func (s *Server) ProcessMessage(message *DecodedMessage) error {
 		return s.processGetStatusMessage(message.From, t)
 	case *StatusMessage:
 		return s.processStatusMessage(message.From, t)
+	case *GetBlocksMessage:
+		return s.processGetBlocksMessage(message.From, t)
 	}
 
 	return nil
+}
+
+// processGetBlocksMessage
+func (s *Server) processGetBlocksMessage(from NetworkAddress, data *GetBlocksMessage) error {
+	panic("here")
+	fmt.Printf("got get blocks message => %+v\n", data)
+
+	return nil
+}
+
+// processStatusMessage
+func (s *Server) processStatusMessage(from NetworkAddress, data *StatusMessage) error {
+	if data.CurrentHeight <= s.chain.Height() {
+		s.options.Logger.Log("msg", "cannot sync blockHeight to low", "ourHeight", s.chain.Height(), "theirHeight", data.CurrentHeight, "addr", from)
+		return nil
+	}
+
+	// In this case we are 100% sure that the node has blocks higher than us.
+	getBlocksMessage := &GetBlocksMessage{
+		From: s.chain.Height(),
+		To:   0,
+	}
+
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(getBlocksMessage); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeGetBlocks, buf.Bytes())
+
+	return s.options.Transport.SendMessage(from, msg.Bytes())
+}
+
+// processGetStatusMessage
+func (s *Server) processGetStatusMessage(from NetworkAddress, data *GetStatusMessage) error {
+	fmt.Printf("=> received Getstatus msg from %s => %+v\n", from, data)
+
+	statusMessage := &StatusMessage{
+		CurrentHeight: s.chain.Height(),
+		ID:            s.options.ID,
+	}
+
+	buf := new(bytes.Buffer)
+
+	if err := gob.NewEncoder(buf).Encode(statusMessage); err != nil {
+		return err
+	}
+
+	msg := NewMessage(MessageTypeStatus, buf.Bytes())
+
+	return s.options.Transport.SendMessage(from, msg.Bytes())
 }
 
 // sendGetStatusMessage normally Transport which is our own transport should do the trick.
@@ -151,38 +199,11 @@ func (s *Server) sendGetStatusMessage(tr Transport) error {
 
 	msg := NewMessage(MessageTypeGetStatus, buf.Bytes())
 
-	if err := tr.SendMessage(tr.Address(), msg.Bytes()); err != nil {
+	if err := s.options.Transport.SendMessage(tr.Address(), msg.Bytes()); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-// processStatusMessage
-func (s *Server) processStatusMessage(from NetworkAddress, data *StatusMessage) error {
-	fmt.Printf("=> received GetStatus response msg from %s => %+v\n", from, data)
-
-	return nil
-}
-
-// processGetStatusMessage
-func (s *Server) processGetStatusMessage(from NetworkAddress, data *GetStatusMessage) error {
-	fmt.Printf("=> received Getstatus msg from %s => %+v\n", from, data)
-
-	statusMessage := &StatusMessage{
-		CurrentHeight: s.chain.Height(),
-		ID:            s.options.ID,
-	}
-
-	buf := new(bytes.Buffer)
-	
-	if err := gob.NewEncoder(buf).Encode(statusMessage); err != nil {
-		return err
-	}
-
-	msg := NewMessage(MessageTypeStatus, buf.Bytes())
-
-	return s.options.Transport.SendMessage(from, msg.Bytes())
 }
 
 // processTransaction handles new transaction from network and adds it into memory pool
@@ -221,6 +242,34 @@ func (s *Server) processBlock(b *core.Block) error {
 	return nil
 }
 
+// broadcast broadcasts a payload to all transports
+func (s *Server) broadcast(payload []byte) error {
+	for _, transport := range s.options.Transports {
+		if err := transport.Broadcast(payload); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// boostrapNodes connects to transports and sends GetStatusMessage
+func (s *Server) boostrapNodes() {
+	for _, tr := range s.options.Transports {
+		if s.options.Transport.Address() != tr.Address() {
+			if err := s.options.Transport.Connect(tr); err != nil {
+				s.options.Logger.Log("error", "could not connect to remote", "err", err)
+			}
+			s.options.Logger.Log("msg", "connect to remote", "we", s.options.Transport.Address(), "addr", tr.Address())
+
+			// Send the getStatusMessage so we can sync (if needed)
+			if err := s.sendGetStatusMessage(tr); err != nil {
+				s.options.Logger.Log("error", "sendGetStatusMessage", "err", err)
+			}
+		}
+	}
+}
+
 // broadcastBlock encodes a block and broadcasts the message
 func (s *Server) broadcastBlock(block *core.Block) error {
 	buf := &bytes.Buffer{}
@@ -232,17 +281,6 @@ func (s *Server) broadcastBlock(block *core.Block) error {
 	message := NewMessage(MessageTypeBlock, buf.Bytes())
 
 	return s.broadcast(message.Bytes())
-}
-
-// broadcast broadcasts a payload to all transports
-func (s *Server) broadcast(payload []byte) error {
-	for _, transport := range s.options.Transports {
-		if err := transport.Broadcast(payload); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // broadcastTransaction encodes a transaction and broadcasts the message

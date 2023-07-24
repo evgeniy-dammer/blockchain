@@ -43,6 +43,10 @@ func (t *LocalTransport) SendMessage(to NetworkAddress, payload []byte) error {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
 
+	if t.address == to {
+		return nil
+	}
+
 	peer, ok := t.peers[to]
 
 	if !ok {
