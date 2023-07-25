@@ -1,5 +1,7 @@
 package network
 
+import "net"
+
 // NetworkAddress
 type NetworkAddress string
 
@@ -7,7 +9,7 @@ type NetworkAddress string
 type Transport interface {
 	Consume() <-chan RPC
 	Connect(transport Transport) error
-	SendMessage(to NetworkAddress, payload []byte) error
+	SendMessage(to net.Addr, payload []byte) error
 	Broadcast([]byte) error
-	Address() NetworkAddress
+	Address() net.Addr
 }

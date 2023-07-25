@@ -2,55 +2,38 @@ package main
 
 import (
 	"bytes"
-	"encoding/gob"
-	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
 	"log"
-	"time"
+	"net"
 )
 
-var transports = []network.Transport{
-	network.NewLocalTransport("LOCAL"),
-	// network.NewLocalTransport("REMOTE_B"),
-	// network.NewLocalTransport("REMOTE_C"),
-}
-
 func main() {
-	initRemoteServers(transports)
-	localNode := transports[0]
-	trLate := network.NewLocalTransport("LATE_NODE")
-	// remoteNodeA := transports[1]
-	// remoteNodeC := transports[3]
-
-	go func() {
-		time.Sleep(7 * time.Second)
-		lateServer := makeServer(string(trLate.Address()), trLate, nil)
-		go lateServer.Start()
-	}()
-
 	privKey := crypto.GeneratePrivateKey()
 
-	localServer := makeServer("LOCAL", localNode, &privKey)
-	localServer.Start()
+	localNode := makeServer("LOCAL_NODE", &privKey, ":3000", []string{":4000"})
+	go localNode.Start()
+
+	remoteNode := makeServer("REMOTE_NODE", nil, ":4000", []string{":5000"})
+	go remoteNode.Start()
+
+	remoteNodeB := makeServer("REMOTE_NODE_B", nil, ":5000", nil)
+	go remoteNodeB.Start()
+
+	// time.Sleep(1 * time.Second)
+
+	// tcpTester()
+
+	select {}
 }
 
-func initRemoteServers(transports []network.Transport) {
-	for i := 0; i < len(transports); i++ {
-		id := fmt.Sprintf("REMOTE_%d", i)
-		s := makeServer(id, transports[i], nil)
-
-		go s.Start()
-	}
-}
-
-func makeServer(id string, transport network.Transport, privateKey *crypto.PrivateKey) *network.Server {
+func makeServer(id string, privateKey *crypto.PrivateKey, addr string, seedNodes []string) *network.Server {
 	options := network.ServerOptions{
-		Transport:  transport,
+		SeedNodes:  seedNodes,
+		ListenAddr: addr,
 		PrivateKey: privateKey,
 		ID:         id,
-		Transports: transports,
 	}
 
 	server, err := network.NewServer(options)
@@ -61,21 +44,13 @@ func makeServer(id string, transport network.Transport, privateKey *crypto.Priva
 	return server
 }
 
-func sendGetStatusMessage(tr network.Transport, to network.NetworkAddress) error {
-	var (
-		getStatusMsg = new(network.GetStatusMessage)
-		buf          = new(bytes.Buffer)
-	)
+func tcpTester() {
+	conn, err := net.Dial("tcp", ":3000")
+	if err != nil {
+		panic(err)
 
-	if err := gob.NewEncoder(buf).Encode(getStatusMsg); err != nil {
-		return err
 	}
-	msg := network.NewMessage(network.MessageTypeGetStatus, buf.Bytes())
 
-	return tr.SendMessage(to, msg.Bytes())
-}
-
-func sendTransaction(transport network.Transport, address network.NetworkAddress) error {
 	privKey := crypto.GeneratePrivateKey()
 	//data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
 	data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
@@ -85,11 +60,15 @@ func sendTransaction(transport network.Transport, address network.NetworkAddress
 
 	buf := &bytes.Buffer{}
 
-	if err := transaction.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
-		return err
+	if err = transaction.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
+		panic(err)
 	}
 
 	message := network.NewMessage(network.MessageTypeTransaction, buf.Bytes())
 
-	return transport.SendMessage(address, message.Bytes())
+	_, err = conn.Write(message.Bytes())
+	if err != nil {
+		panic(err)
+	}
+
 }

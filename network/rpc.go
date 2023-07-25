@@ -7,6 +7,7 @@ import (
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/rs/zerolog/log"
 	"io"
+	"net"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 
 // RPC
 type RPC struct {
-	From    NetworkAddress
+	From    net.Addr
 	Payload io.Reader
 }
 
@@ -50,7 +51,7 @@ func (m *Message) Bytes() []byte {
 
 // DecodedMessage
 type DecodedMessage struct {
-	From NetworkAddress
+	From net.Addr
 	Data any
 }
 
