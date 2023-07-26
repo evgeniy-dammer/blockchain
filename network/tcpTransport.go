@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 )
 
@@ -17,9 +18,13 @@ func (p *TCPPeer) Send(b []byte) error {
 }
 
 func (p *TCPPeer) readLoop(rpcCh chan RPC) {
-	buf := make([]byte, 2048)
+	buf := make([]byte, 4096)
 	for {
 		n, err := p.conn.Read(buf)
+		if err == io.EOF {
+			continue
+		}
+
 		if err != nil {
 			fmt.Printf("read error: %s", err)
 			continue
@@ -59,22 +64,6 @@ func (t *TCPTransport) Start() error {
 	return nil
 }
 
-func (t *TCPTransport) readLoop(peer *TCPPeer) {
-	buf := make([]byte, 2048)
-	for {
-		n, err := peer.conn.Read(buf)
-		if err != nil {
-			fmt.Printf("read error: %s", err)
-			continue
-		}
-
-		msg := buf[:n]
-		fmt.Println(string(msg))
-		// handleMessage => server
-
-	}
-}
-
 func (t *TCPTransport) acceptLoop() {
 	for {
 		conn, err := t.listener.Accept()
@@ -88,9 +77,5 @@ func (t *TCPTransport) acceptLoop() {
 		}
 
 		t.peerCh <- peer
-
-		fmt.Printf("new incoming TCP connection => %+v\n", conn)
-
-		// go t.readLoop(peer)
 	}
 }

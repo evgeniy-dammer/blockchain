@@ -28,6 +28,20 @@ func TestBlockchain_HasBlock(t *testing.T) {
 	assert.True(t, blockchain.HasBlock(0))
 }
 
+func TestBlockchain_GetBlock(t *testing.T) {
+	bc := newBlockchainWithGenesis(t)
+	lenBlocks := 100
+
+	for i := 0; i < lenBlocks; i++ {
+		block := randomBlock(t, uint32(i+1), getPreviousBlockHash(t, bc, uint32(i+1)))
+		assert.Nil(t, bc.AddBlock(block))
+
+		fetchedBlock, err := bc.GetBlock(block.Header.Height)
+		assert.Nil(t, err)
+		assert.Equal(t, fetchedBlock, block)
+	}
+}
+
 func TestBlockchain_AddBlock(t *testing.T) {
 	blockchain := newBlockchainWithGenesis(t)
 	block := randomBlock(t, uint32(1), getPreviousBlockHash(t, blockchain, uint32(1)))
