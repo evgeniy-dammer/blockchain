@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"github.com/evgeniy-dammer/blockchain/core"
-	"github.com/rs/zerolog/log"
 	"io"
 	"net"
 )
@@ -72,7 +71,7 @@ func DefaultRPCDecodeFunc(rpc RPC) (*DecodedMessage, error) {
 		return nil, fmt.Errorf("failed to decode message from %s: %s", rpc.From, err)
 	}
 
-	log.Info().Msgf("receives a new message from %s with %x type", rpc.From, message.Type)
+	//log.Info().Msgf("receives a new message from %s with %x type", rpc.From, message.Type)
 
 	switch message.Type {
 	case MessageTypeTransaction:

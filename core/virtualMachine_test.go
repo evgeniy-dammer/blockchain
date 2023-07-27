@@ -28,14 +28,10 @@ func TestStack_PushBytes(t *testing.T) {
 }
 
 func TestVirtualMachine_Run(t *testing.T) {
-	//data := []byte{0x02, 0x0a, 0x02, 0x0a, 0x0b}
-
 	data := []byte{0x03, 0x0a, 0x46, 0x0c, 0x4f, 0x0c, 0x4f, 0x0c, 0x0d, 0x05, 0x0a, 0x0f}
-
 	contractState := NewState()
-	virtualMachine := NewVirtualMachine(data, contractState)
-
-	assert.Nil(t, virtualMachine.Run())
+	vm := NewVirtualMachine(data, contractState)
+	assert.Nil(t, vm.Run())
 
 	valueBytes, err := contractState.Get([]byte("FOO"))
 	value := deserializeInt64(valueBytes)

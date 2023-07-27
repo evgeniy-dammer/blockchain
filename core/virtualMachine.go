@@ -32,17 +32,16 @@ func NewStack(size int) *Stack {
 
 // Push pushes the given value at the end of the stack
 func (s *Stack) Push(value any) {
-	s.data = append([]any{value}, s.data...)
-	//s.data[s.stackPointer] = value
+	s.data[s.stackPointer] = value
 	s.stackPointer++
 }
 
 // Pop pops the value from the start of the stack
 func (s *Stack) Pop() any {
 	value := s.data[0]
-
 	s.data = append(s.data[:0], s.data[1:]...)
 	s.stackPointer--
+
 	return value
 }
 

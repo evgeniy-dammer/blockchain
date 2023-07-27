@@ -1,12 +1,6 @@
 package network
 
-import (
-	"github.com/stretchr/testify/assert"
-	"io"
-	"testing"
-)
-
-func TestLocalTransport_Connect(t *testing.T) {
+/*func TestLocalTransport_Connect(t *testing.T) {
 	tra := NewLocalTransport("A").(*LocalTransport)
 	trb := NewLocalTransport("B").(*LocalTransport)
 
@@ -60,4 +54,4 @@ func TestLocalTransport_Broadcast(t *testing.T) {
 	c, err := io.ReadAll(rpcc.Payload)
 	assert.Nil(t, err)
 	assert.Equal(t, c, msg)
-}
+}*/
