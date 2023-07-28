@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/evgeniy-dammer/blockchain/api"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
@@ -18,6 +19,7 @@ var defaultBlockTime = time.Second * 5
 
 // ServerOptions
 type ServerOptions struct {
+	APIListenAddr string
 	SeedNodes     []string
 	ListenAddr    string
 	TCPTransport  *TCPTransport
@@ -61,6 +63,18 @@ func NewServer(options ServerOptions) (*Server, error) {
 	chain, err := core.NewBlockchain(options.Logger, genesisBlock())
 	if err != nil {
 		return nil, err
+	}
+
+	// Only boot up the API server if the config has a valid port number.
+	if len(options.APIListenAddr) > 0 {
+		apiServerCfg := api.ServerConfig{
+			Logger:     options.Logger,
+			ListenAddr: options.APIListenAddr,
+		}
+		apiServer := api.NewServer(apiServerCfg, chain)
+		go apiServer.Start()
+
+		options.Logger.Log("msg", "JSON API server running", "port", options.APIListenAddr)
 	}
 
 	peerCh := make(chan *TCPPeer)
