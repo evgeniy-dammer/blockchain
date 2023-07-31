@@ -6,20 +6,20 @@ import (
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
 	"log"
-	"net"
+	"net/http"
 	"time"
 )
 
 func main() {
 	privKey := crypto.GeneratePrivateKey()
 
-	localNode := makeServer("LOCAL_NODE", &privKey, ":3000", []string{":4000"}, ":9000")
+	localNode := makeServer("LOCAL_NODE", &privKey, ":3000", []string{":4000"}, ":9999")
 	go localNode.Start()
 
-	remoteNode := makeServer("REMOTE_NODE", nil, ":4000", []string{":5000"}, "")
+	remoteNode := makeServer("REMOTE_NODE", nil, ":4000", []string{":7000"}, "")
 	go remoteNode.Start()
 
-	remoteNodeB := makeServer("REMOTE_NODE_B", nil, ":5000", nil, "")
+	remoteNodeB := makeServer("REMOTE_NODE_B", nil, ":7000", nil, "")
 	go remoteNodeB.Start()
 
 	go func() {
@@ -32,7 +32,14 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-	txSender()
+	txSendTicker := time.NewTicker(1 * time.Second)
+	go func() {
+		for {
+			txSender()
+
+			<-txSendTicker.C
+		}
+	}()
 
 	select {}
 }
@@ -55,14 +62,7 @@ func makeServer(id string, privateKey *crypto.PrivateKey, addr string, seedNodes
 }
 
 func txSender() {
-	conn, err := net.Dial("tcp", ":3000")
-	if err != nil {
-		panic(err)
-
-	}
-
 	privKey := crypto.GeneratePrivateKey()
-	//data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
 	data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
 
 	transaction := core.NewTransaction(data)
@@ -70,15 +70,19 @@ func txSender() {
 
 	buf := &bytes.Buffer{}
 
-	if err = transaction.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
+	if err := transaction.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
 		panic(err)
 	}
 
-	message := network.NewMessage(network.MessageTypeTransaction, buf.Bytes())
-
-	_, err = conn.Write(message.Bytes())
+	req, err := http.NewRequest("POST", "http://localhost:9999/tx", buf)
 	if err != nil {
 		panic(err)
 	}
 
+	client := http.Client{}
+
+	_, err = client.Do(req)
+	if err != nil {
+		panic(err)
+	}
 }

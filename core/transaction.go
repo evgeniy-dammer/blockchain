@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
+	"math/rand"
 )
 
 // Transaction
@@ -11,13 +12,15 @@ type Transaction struct {
 	Data      []byte
 	From      crypto.PublicKey
 	Signature *crypto.Signature
+	Nonce     int64
 	hash      types.Hash // cached version of transaction data hash
 }
 
 // NewTransaction is a constructor for a Transaction
 func NewTransaction(data []byte) *Transaction {
 	return &Transaction{
-		Data: data,
+		Data:  data,
+		Nonce: rand.Int63n(1000000000000000),
 	}
 }
 
