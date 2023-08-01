@@ -1,14 +1,38 @@
 package core
 
 import (
+	"encoding/gob"
 	"fmt"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
 	"math/rand"
 )
 
+type TxType byte
+
+const (
+	TxTypeCollection TxType = iota // 0x0
+	TxTypeMint                     // 0x01
+)
+
+type CollectionTx struct {
+	Fee      int64
+	MetaData []byte
+}
+
+type MintTx struct {
+	Fee             int64
+	NFT             types.Hash
+	Collection      types.Hash
+	MetaData        []byte
+	CollectionOwner crypto.PublicKey
+	Signature       crypto.Signature
+}
+
 // Transaction
 type Transaction struct {
+	Type      TxType
+	TxInner   any
 	Data      []byte
 	From      crypto.PublicKey
 	Signature *crypto.Signature
@@ -67,4 +91,9 @@ func (t *Transaction) Encode(encoder Encoder[*Transaction]) error {
 // Decode decodes the transaction
 func (t *Transaction) Decode(decoder Decoder[*Transaction]) error {
 	return decoder.Decode(t)
+}
+
+func init() {
+	gob.Register(CollectionTx{})
+	gob.Register(MintTx{})
 }

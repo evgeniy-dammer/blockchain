@@ -9,26 +9,31 @@ import (
 
 // Blockchain
 type Blockchain struct {
-	logger        log.Logger
-	store         Storage
-	lock          sync.RWMutex
-	headers       []*Header
-	blocks        []*Block
-	txStore       map[types.Hash]*Transaction
-	blockStore    map[types.Hash]*Block
-	validator     Validator
-	contractState *State
+	logger          log.Logger
+	store           Storage
+	lock            sync.RWMutex
+	headers         []*Header
+	blocks          []*Block
+	txStore         map[types.Hash]*Transaction
+	blockStore      map[types.Hash]*Block
+	stateLock       sync.RWMutex
+	collectionState map[types.Hash]*CollectionTx
+	mintState       map[types.Hash]*MintTx
+	validator       Validator
+	contractState   *State
 }
 
 // NewBlockchain is a constructor for the Blockchain
 func NewBlockchain(logger log.Logger, genesis *Block) (*Blockchain, error) {
 	blockchain := &Blockchain{
-		headers:       []*Header{},
-		store:         NewMemoryStore(),
-		logger:        logger,
-		blockStore:    make(map[types.Hash]*Block),
-		txStore:       make(map[types.Hash]*Transaction),
-		contractState: NewState(),
+		headers:         []*Header{},
+		store:           NewMemoryStore(),
+		logger:          logger,
+		blockStore:      make(map[types.Hash]*Block),
+		txStore:         make(map[types.Hash]*Transaction),
+		collectionState: make(map[types.Hash]*CollectionTx),
+		mintState:       make(map[types.Hash]*MintTx),
+		contractState:   NewState(),
 	}
 
 	blockchain.validator = NewBlockValidator(blockchain)
@@ -73,13 +78,34 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 		return err
 	}
 
+	bc.stateLock.Lock()
+	defer bc.stateLock.Unlock()
+
 	for _, transaction := range block.Transactions {
-		bc.logger.Log("msg", "executing code", "len", len(transaction.Data), "hash", transaction.Hash(&TransactionHasher{}))
+		// If we have data inside execute that data on the VM.
+		if len(transaction.Data) > 0 {
+			bc.logger.Log("msg", "executing code", "len", len(transaction.Data), "hash", transaction.Hash(&TransactionHasher{}))
+			vm := NewVirtualMachine(transaction.Data, bc.contractState)
+			if err := vm.Run(); err != nil {
+				return err
+			}
+		}
 
-		virtualMachine := NewVirtualMachine(transaction.Data, bc.contractState)
+		hash := transaction.Hash(TransactionHasher{})
+		switch t := transaction.TxInner.(type) {
+		case CollectionTx:
+			bc.collectionState[hash] = &t
+			bc.logger.Log("msg", "created new NFT collection", "hash", hash)
+		case MintTx:
+			_, ok := bc.collectionState[t.Collection]
+			if !ok {
+				return fmt.Errorf("collection (%s) does not exist on the blockchain", t.Collection)
+			}
+			bc.mintState[hash] = &t
 
-		if err := virtualMachine.Run(); err != nil {
-			return err
+			bc.logger.Log("msg", "created new NFT mint", "NFT", t.NFT, "collection", t.Collection)
+		default:
+			fmt.Printf("unsupported tx type %v", t)
 		}
 	}
 

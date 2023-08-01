@@ -2,18 +2,21 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/evgeniy-dammer/blockchain/core"
 	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/network"
+	"github.com/evgeniy-dammer/blockchain/types"
+	"github.com/evgeniy-dammer/blockchain/util"
 	"log"
 	"net/http"
 	"time"
 )
 
 func main() {
-	privKey := crypto.GeneratePrivateKey()
+	validatorPrivKey := crypto.GeneratePrivateKey()
 
-	localNode := makeServer("LOCAL_NODE", &privKey, ":3000", []string{":4000"}, ":9999")
+	localNode := makeServer("LOCAL_NODE", &validatorPrivKey, ":3000", []string{":4000"}, ":9999")
 	go localNode.Start()
 
 	remoteNode := makeServer("REMOTE_NODE", nil, ":4000", []string{":7000"}, "")
@@ -32,10 +35,13 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
+	collectionOwnerPrivKey := crypto.GeneratePrivateKey()
+	collectionHash := createCollectionTx(collectionOwnerPrivKey)
+
 	txSendTicker := time.NewTicker(1 * time.Second)
 	go func() {
-		for {
-			txSender()
+		for i := 0; i < 20; i++ {
+			nftMinter(collectionOwnerPrivKey, collectionHash)
 
 			<-txSendTicker.C
 		}
@@ -61,11 +67,13 @@ func makeServer(id string, privateKey *crypto.PrivateKey, addr string, seedNodes
 	return server
 }
 
-func txSender() {
-	privKey := crypto.GeneratePrivateKey()
-	data := []byte{0x01, 0x0a, 0x02, 0x0a, 0x0b}
+func createCollectionTx(privKey crypto.PrivateKey) types.Hash {
+	transaction := core.NewTransaction(nil)
+	transaction.TxInner = core.CollectionTx{
+		Fee:      200,
+		MetaData: []byte("chicken and egg collection!"),
+	}
 
-	transaction := core.NewTransaction(data)
 	transaction.Sign(privKey)
 
 	buf := &bytes.Buffer{}
@@ -81,6 +89,48 @@ func txSender() {
 
 	client := http.Client{}
 
+	_, err = client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+
+	return transaction.Hash(core.TransactionHasher{})
+}
+
+func nftMinter(privKey crypto.PrivateKey, collection types.Hash) {
+	metaData := map[string]any{
+		"power":  8,
+		"health": 100,
+		"color":  "green",
+		"rare":   "yes",
+	}
+
+	metaBuf := new(bytes.Buffer)
+	if err := json.NewEncoder(metaBuf).Encode(metaData); err != nil {
+		panic(err)
+	}
+
+	tx := core.NewTransaction(nil)
+	tx.TxInner = core.MintTx{
+		Fee:             200,
+		NFT:             util.RandomHash(),
+		MetaData:        metaBuf.Bytes(),
+		Collection:      collection,
+		CollectionOwner: privKey.PublicKey(),
+	}
+	tx.Sign(privKey)
+
+	buf := &bytes.Buffer{}
+	if err := tx.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
+		panic(err)
+	}
+
+	req, err := http.NewRequest("POST", "http://localhost:9000/tx", buf)
+	if err != nil {
+		panic(err)
+	}
+
+	client := http.Client{}
 	_, err = client.Do(req)
 	if err != nil {
 		panic(err)
