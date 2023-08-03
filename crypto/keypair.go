@@ -48,6 +48,10 @@ func (k PrivateKey) PublicKey() PublicKey {
 // PublicKey
 type PublicKey []byte
 
+func (k PublicKey) String() string {
+	return hex.EncodeToString(k)
+}
+
 // Address returns an Address of a PublicKey
 func (k PublicKey) Address() types.Address {
 	h := sha256.Sum256(k)

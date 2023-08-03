@@ -61,7 +61,12 @@ func NewServer(options ServerOptions) (*Server, error) {
 		options.Logger = log.With(options.Logger, "addr", options.ID)
 	}
 
-	chain, err := core.NewBlockchain(options.Logger, genesisBlock())
+	accountState := core.NewAccountState()
+	if options.PrivateKey != nil {
+		accountState.AddBalance(options.PrivateKey.PublicKey().Address(), 1000000)
+	}
+
+	chain, err := core.NewBlockchain(options.Logger, genesisBlock(), accountState)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +259,6 @@ func (s *Server) processBlocksMessage(from net.Addr, data *BlocksMessage) error 
 	s.options.Logger.Log("msg", "received BLOCKS!!!!!!!!", "from", from)
 
 	for _, block := range data.Blocks {
-		fmt.Printf("BlOCK with %+v\n", block.Header)
 		if err := s.chain.AddBlock(block); err != nil {
 			return err
 		}

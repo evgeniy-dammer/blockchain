@@ -35,7 +35,11 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-	collectionOwnerPrivKey := crypto.GeneratePrivateKey()
+	if err := sendTransaction(validatorPrivKey); err != nil {
+		panic(err)
+	}
+
+	/*collectionOwnerPrivKey := crypto.GeneratePrivateKey()
 	collectionHash := createCollectionTx(collectionOwnerPrivKey)
 
 	txSendTicker := time.NewTicker(1 * time.Second)
@@ -45,7 +49,7 @@ func main() {
 
 			<-txSendTicker.C
 		}
-	}()
+	}()*/
 
 	select {}
 }
@@ -65,6 +69,33 @@ func makeServer(id string, privateKey *crypto.PrivateKey, addr string, seedNodes
 	}
 
 	return server
+}
+
+func sendTransaction(privKey crypto.PrivateKey) error {
+	toPrivKey := crypto.GeneratePrivateKey()
+
+	tx := core.NewTransaction(nil)
+	tx.To = toPrivKey.PublicKey()
+	tx.Value = 666
+
+	if err := tx.Sign(privKey); err != nil {
+		return err
+	}
+
+	buf := &bytes.Buffer{}
+	if err := tx.Encode(core.NewGobTransactionEncoder(buf)); err != nil {
+		panic(err)
+	}
+
+	req, err := http.NewRequest("POST", "http://localhost:9999/tx", buf)
+	if err != nil {
+		panic(err)
+	}
+
+	client := http.Client{}
+	_, err = client.Do(req)
+
+	return err
 }
 
 func createCollectionTx(privKey crypto.PrivateKey) types.Hash {

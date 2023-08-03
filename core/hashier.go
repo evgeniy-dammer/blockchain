@@ -1,8 +1,9 @@
 package core
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
+	"encoding/gob"
 	"github.com/evgeniy-dammer/blockchain/types"
 )
 
@@ -26,9 +27,10 @@ type TransactionHasher struct{}
 
 // Hash hashes a transaction's data
 func (TransactionHasher) Hash(transaction *Transaction) types.Hash {
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(transaction.Nonce))
-	data := append(buf, transaction.Data...)
+	buf := new(bytes.Buffer)
+	if err := gob.NewEncoder(buf).Encode(transaction); err != nil {
+		panic(err)
+	}
 
-	return types.Hash(sha256.Sum256(data))
+	return types.Hash(sha256.Sum256(buf.Bytes()))
 }

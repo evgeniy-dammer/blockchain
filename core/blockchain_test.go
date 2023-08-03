@@ -8,7 +8,9 @@ import (
 )
 
 func newBlockchainWithGenesis(t *testing.T) *Blockchain {
-	blockchain, err := NewBlockchain(log.NewNopLogger(), randomBlock(t, 0, types.Hash{}))
+	accountState := NewAccountState()
+
+	blockchain, err := NewBlockchain(log.NewNopLogger(), randomBlock(t, 0, types.Hash{}), accountState)
 
 	assert.Nil(t, err)
 
