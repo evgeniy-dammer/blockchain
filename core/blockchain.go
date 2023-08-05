@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
 	"github.com/go-kit/log"
 	"sync"
@@ -25,12 +26,21 @@ type Blockchain struct {
 }
 
 // NewBlockchain is a constructor for the Blockchain
-func NewBlockchain(logger log.Logger, genesis *Block, ac *AccountState) (*Blockchain, error) {
+func NewBlockchain(logger log.Logger, genesis *Block) (*Blockchain, error) {
+	// We should create all states inside the scope of the new blockchain.
+
+	// TODO: read this from disk later on
+	accountState := NewAccountState()
+
+	coinbase := crypto.PublicKey{}
+	fmt.Println(coinbase.Address())
+	accountState.CreateAccount(coinbase.Address())
+
 	blockchain := &Blockchain{
 		headers:         []*Header{},
 		store:           NewMemoryStore(),
 		logger:          logger,
-		accountState:    ac,
+		accountState:    accountState,
 		blockStore:      make(map[types.Hash]*Block),
 		txStore:         make(map[types.Hash]*Transaction),
 		collectionState: make(map[types.Hash]*CollectionTx),
@@ -80,36 +90,6 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 		return err
 	}
 
-	bc.stateLock.Lock()
-	defer bc.stateLock.Unlock()
-
-	for _, transaction := range block.Transactions {
-		// If we have data inside execute that data on the VM.
-		if len(transaction.Data) > 0 {
-			bc.logger.Log("msg", "executing code", "len", len(transaction.Data), "hash", transaction.Hash(&TransactionHasher{}))
-
-			vm := NewVirtualMachine(transaction.Data, bc.contractState)
-			if err := vm.Run(); err != nil {
-				return err
-			}
-		}
-
-		// If the txInner of the transaction is not nil we need to handle
-		// the native NFT implemtation.
-		if transaction.TxInner != nil {
-			if err := bc.handleNativeNFT(transaction); err != nil {
-				return err
-			}
-		}
-
-		// Handle the native transaction here
-		if transaction.Value > 0 {
-			if err := bc.handleNativeTransfer(transaction); err != nil {
-				return err
-			}
-		}
-	}
-
 	if err := bc.addBlockWithoutValidation(block); err != nil {
 		return err
 	}
@@ -118,7 +98,11 @@ func (bc *Blockchain) AddBlock(block *Block) error {
 }
 
 func (bc *Blockchain) handleNativeTransfer(tx *Transaction) error {
-	bc.logger.Log("msg", "handle native token transfer", "from", tx.From, "to", tx.To, "value", tx.Value)
+	bc.logger.Log(
+		"msg", "handle native token transfer",
+		"from", tx.From,
+		"to", tx.To,
+		"value", tx.Value)
 
 	return bc.accountState.Transfer(tx.From.Address(), tx.To.Address(), tx.Value)
 }
@@ -135,6 +119,7 @@ func (bc *Blockchain) handleNativeNFT(tx *Transaction) error {
 		if !ok {
 			return fmt.Errorf("collection (%s) does not exist on the blockchain", t.Collection)
 		}
+
 		bc.mintState[hash] = &t
 
 		bc.logger.Log("msg", "created new NFT mint", "NFT", t.NFT, "collection", t.Collection)
@@ -183,6 +168,40 @@ func (bc *Blockchain) Height() uint32 {
 
 // addBlockWithoutValidation adds a block into blockchain without validation
 func (bc *Blockchain) addBlockWithoutValidation(block *Block) error {
+	bc.stateLock.Lock()
+	for _, tx := range block.Transactions {
+		// If we have data inside execute that data on the VM.
+		if len(tx.Data) > 0 {
+			bc.logger.Log("msg", "executing code", "len", len(tx.Data), "hash", tx.Hash(&TransactionHasher{}))
+
+			vm := NewVirtualMachine(tx.Data, bc.contractState)
+			if err := vm.Run(); err != nil {
+				return err
+			}
+		}
+
+		// If the txInner of the transaction is not nil we need to handle
+		// the native NFT implementation.
+		if tx.TxInner != nil {
+			if err := bc.handleNativeNFT(tx); err != nil {
+				return err
+			}
+		}
+
+		// Handle the native transaction here
+		if tx.Value > 0 {
+			if err := bc.handleNativeTransfer(tx); err != nil {
+				return err
+			}
+		}
+	}
+
+	bc.stateLock.Unlock()
+
+	fmt.Println("========ACCOUNT STATE==============")
+	fmt.Printf("%+v\n", bc.accountState.accounts)
+	fmt.Println("========ACCOUNT STATE==============")
+
 	bc.lock.RLock()
 
 	bc.headers = append(bc.headers, block.Header)

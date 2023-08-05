@@ -61,12 +61,7 @@ func NewServer(options ServerOptions) (*Server, error) {
 		options.Logger = log.With(options.Logger, "addr", options.ID)
 	}
 
-	accountState := core.NewAccountState()
-	if options.PrivateKey != nil {
-		accountState.AddBalance(options.PrivateKey.PublicKey().Address(), 1000000)
-	}
-
-	chain, err := core.NewBlockchain(options.Logger, genesisBlock(), accountState)
+	chain, err := core.NewBlockchain(options.Logger, genesisBlock())
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +184,13 @@ func (s *Server) validatorLoop() {
 	s.options.Logger.Log("msg", "starting validator loop...", "blocktime", s.options.BlockTime)
 
 	for {
+		fmt.Println("creating new block")
+
+		if err := s.createNewBlock(); err != nil {
+			s.options.Logger.Log("create block error", err)
+		}
+
 		<-ticker.C
-		s.createNewBlock()
 	}
 }
 
@@ -247,6 +247,7 @@ func (s *Server) processGetBlocksMessage(from net.Addr, data *GetBlocksMessage) 
 	defer s.mu.RUnlock()
 
 	msg := NewMessage(MessageTypeBlocks, buf.Bytes())
+
 	peer, ok := s.peerMap[from]
 	if !ok {
 		return fmt.Errorf("peer %s not known", peer.conn.RemoteAddr())
@@ -260,6 +261,7 @@ func (s *Server) processBlocksMessage(from net.Addr, data *BlocksMessage) error 
 
 	for _, block := range data.Blocks {
 		if err := s.chain.AddBlock(block); err != nil {
+			s.options.Logger.Log("error", err.Error())
 			return err
 		}
 	}
@@ -313,11 +315,13 @@ func (s *Server) sendGetStatusMessage(peer *TCPPeer) error {
 		getStatusMsg = new(GetStatusMessage)
 		buf          = new(bytes.Buffer)
 	)
+	
 	if err := gob.NewEncoder(buf).Encode(getStatusMsg); err != nil {
 		return err
 	}
 
 	msg := NewMessage(MessageTypeGetStatus, buf.Bytes())
+
 	return peer.Send(msg.Bytes())
 }
 
@@ -387,6 +391,7 @@ func (s *Server) requestBlocksLoop(peer net.Addr) error {
 // processBlock adds block to servers chain and broadcasts the block
 func (s *Server) processBlock(b *core.Block) error {
 	if err := s.chain.AddBlock(b); err != nil {
+		s.options.Logger.Log("error", err.Error())
 		return err
 	}
 
@@ -478,6 +483,13 @@ func genesisBlock() *core.Block {
 	}
 
 	b, _ := core.NewBlock(header, nil)
+
+	coinbase := crypto.PublicKey{}
+	tx := core.NewTransaction(nil)
+	tx.From = coinbase
+	tx.To = coinbase
+	tx.Value = 10_000_000
+	b.Transactions = append(b.Transactions, tx)
 
 	privKey := crypto.GeneratePrivateKey()
 	if err := b.Sign(privKey); err != nil {

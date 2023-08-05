@@ -35,11 +35,11 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-	if err := sendTransaction(validatorPrivKey); err != nil {
+	/*if err := sendTransaction(validatorPrivKey); err != nil {
 		panic(err)
 	}
 
-	/*collectionOwnerPrivKey := crypto.GeneratePrivateKey()
+	collectionOwnerPrivKey := crypto.GeneratePrivateKey()
 	collectionHash := createCollectionTx(collectionOwnerPrivKey)
 
 	txSendTicker := time.NewTicker(1 * time.Second)
@@ -156,7 +156,7 @@ func nftMinter(privKey crypto.PrivateKey, collection types.Hash) {
 		panic(err)
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:9000/tx", buf)
+	req, err := http.NewRequest("POST", "http://localhost:9999/tx", buf)
 	if err != nil {
 		panic(err)
 	}
