@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+	"github.com/evgeniy-dammer/blockchain/crypto"
 	"github.com/evgeniy-dammer/blockchain/types"
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/assert"
@@ -73,4 +75,102 @@ func getPreviousBlockHash(t *testing.T, blockchain *Blockchain, height uint32) t
 	assert.Nil(t, err)
 
 	return BlockHasher{}.Hash(prevHeader)
+}
+
+func TestSendNativeTransferTamper(t *testing.T) {
+	bc := newBlockchainWithGenesis(t)
+
+	signer := crypto.GeneratePrivateKey()
+
+	block := randomBlock(t, uint32(1), getPreviousBlockHash(t, bc, uint32(1)))
+	assert.Nil(t, block.Sign(signer))
+
+	privKeyBob := crypto.GeneratePrivateKey()
+	privKeyAlice := crypto.GeneratePrivateKey()
+	amount := uint64(100)
+
+	accountBob := bc.accountState.CreateAccount(privKeyBob.PublicKey().Address())
+	accountBob.Balance = amount
+
+	tx := NewTransaction([]byte{})
+	tx.From = privKeyBob.PublicKey()
+	tx.To = privKeyAlice.PublicKey()
+	tx.Value = amount
+	tx.Sign(privKeyBob)
+
+	hackerPrivKey := crypto.GeneratePrivateKey()
+	tx.To = hackerPrivKey.PublicKey()
+
+	block.AddTransaction(tx)
+
+	assert.Nil(t, bc.AddBlock(block)) // this should fail
+
+	//fmt.Printf("%+v\n", hackerPrivKey.PublicKey().Address())
+	fmt.Printf("%+v\n", bc.accountState.accounts)
+	fmt.Printf("%+v\n", privKeyAlice.PublicKey().Address())
+
+	accountHacker, err := bc.accountState.GetAccount(hackerPrivKey.PublicKey().Address())
+	fmt.Printf("%s\n", err)
+	assert.NotNil(t, err)
+
+	assert.Equal(t, uint64(0), accountHacker.Balance)
+
+	_, err = bc.accountState.GetAccount(privKeyAlice.PublicKey().Address())
+	assert.NotNil(t, err)
+	// assert.Equal(t, accountAlice.Balance, amount)
+}
+
+func TestSendNativeTransferInsuffientBalance(t *testing.T) {
+	bc := newBlockchainWithGenesis(t)
+
+	signer := crypto.GeneratePrivateKey()
+
+	block := randomBlock(t, uint32(1), getPreviousBlockHash(t, bc, uint32(1)))
+	assert.Nil(t, block.Sign(signer))
+
+	privKeyBob := crypto.GeneratePrivateKey()
+	privKeyAlice := crypto.GeneratePrivateKey()
+	amount := uint64(100)
+
+	accountBob := bc.accountState.CreateAccount(privKeyBob.PublicKey().Address())
+	accountBob.Balance = uint64(99)
+
+	tx := NewTransaction([]byte{})
+	tx.From = privKeyBob.PublicKey()
+	tx.To = privKeyAlice.PublicKey()
+	tx.Value = amount
+	tx.Sign(privKeyBob)
+	block.AddTransaction(tx)
+	assert.NotNil(t, bc.AddBlock(block))
+
+	_, err := bc.accountState.GetAccount(privKeyAlice.PublicKey().Address())
+	assert.NotNil(t, err)
+}
+
+func TestSendNativeTransferSuccess(t *testing.T) {
+	bc := newBlockchainWithGenesis(t)
+
+	signer := crypto.GeneratePrivateKey()
+
+	block := randomBlock(t, uint32(1), getPreviousBlockHash(t, bc, uint32(1)))
+	assert.Nil(t, block.Sign(signer))
+
+	privKeyBob := crypto.GeneratePrivateKey()
+	privKeyAlice := crypto.GeneratePrivateKey()
+	amount := uint64(100)
+
+	accountBob := bc.accountState.CreateAccount(privKeyBob.PublicKey().Address())
+	accountBob.Balance = amount
+
+	tx := NewTransaction([]byte{})
+	tx.From = privKeyBob.PublicKey()
+	tx.To = privKeyAlice.PublicKey()
+	tx.Value = amount
+	tx.Sign(privKeyBob)
+	block.AddTransaction(tx)
+	assert.Nil(t, bc.AddBlock(block))
+
+	accountAlice, err := bc.accountState.GetAccount(privKeyAlice.PublicKey().Address())
+	assert.Nil(t, err)
+	assert.Equal(t, amount, accountAlice.Balance)
 }

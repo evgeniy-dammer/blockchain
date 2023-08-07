@@ -68,6 +68,8 @@ func NewBlockFromPreviousHeader(previousHeader *Header, transactions []*Transact
 // AddTransaction adds Transaction to Blockchain
 func (b *Block) AddTransaction(tx *Transaction) {
 	b.Transactions = append(b.Transactions, tx)
+	hash, _ := CalculateDataHash(b.Transactions)
+	b.Header.DataHash = hash
 }
 
 // Sign signs a Block data
